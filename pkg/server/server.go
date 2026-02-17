@@ -317,7 +317,7 @@ func (s *Server) StartBroadcastWorker() {
 			now := time.Now()
 
 			// Query for new entries since last check
-			entries := make([]*storage.LogEntry, 0)
+			entries := make([]*storage.LogEntry, 0, 100)
 			s.storage.Scan(func(entry *storage.LogEntry) error {
 				if entry.Timestamp.After(lastCheck) {
 					entries = append(entries, entry)

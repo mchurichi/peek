@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,6 +25,8 @@ type BadgerStorage struct {
 	mu              sync.RWMutex
 	writeCount      int
 	cleanupInterval int
+	cleanupChan     chan struct{}
+	doneChan        chan struct{}
 }
 
 // Config holds storage configuration
@@ -55,20 +56,27 @@ func NewBadgerStorage(cfg Config) (*BadgerStorage, error) {
 		return nil, fmt.Errorf("failed to open badger db: %w", err)
 	}
 	
-	// Run value log garbage collection to ensure data is visible
-	db.RunValueLogGC(0.5)
+	// Run value log garbage collection in background
+	go func() {
+		db.RunValueLogGC(0.5)
+	}()
 
 	s := &BadgerStorage{
 		db:              db,
 		retentionSize:   cfg.RetentionSize,
 		retentionDays:   cfg.RetentionDays,
 		cleanupInterval: 1000, // Run cleanup every 1000 writes
+		cleanupChan:     make(chan struct{}, 1),
+		doneChan:        make(chan struct{}),
 	}
 
 	// Run initial cleanup
 	if err := s.enforceRetention(); err != nil {
 		return nil, fmt.Errorf("failed to enforce retention: %w", err)
 	}
+	
+	// Start background cleanup worker
+	go s.cleanupWorker()
 
 	return s, nil
 }
@@ -111,7 +119,13 @@ func (s *BadgerStorage) Store(entry *LogEntry) error {
 
 	// Periodically run cleanup
 	if shouldCleanup {
-		go s.enforceRetention()
+		// Use a channel to prevent multiple concurrent cleanups
+		select {
+		case s.cleanupChan <- struct{}{}:
+			// Cleanup will be handled by background worker
+		default:
+			// Cleanup already in progress, skip
+		}
 	}
 
 	return nil
@@ -345,12 +359,25 @@ func (s *BadgerStorage) deleteEntriesOlderThan(cutoff time.Time) error {
 
 // Close closes the database
 func (s *BadgerStorage) Close() error {
+	close(s.doneChan)
 	return s.db.Close()
 }
 
 // Sync syncs the database to disk
 func (s *BadgerStorage) Sync() error {
 	return s.db.Sync()
+}
+
+// cleanupWorker runs in the background and handles cleanup requests
+func (s *BadgerStorage) cleanupWorker() {
+	for {
+		select {
+		case <-s.cleanupChan:
+			s.enforceRetention()
+		case <-s.doneChan:
+			return
+		}
+	}
 }
 
 // Stats represents storage statistics
@@ -483,9 +510,4 @@ func (s *BadgerStorage) Subscribe(filter Filter) (<-chan *LogEntry, func()) {
 	}
 
 	return ch, cancel
-}
-
-// CompareBytes compares two byte slices
-func compareBytes(a, b []byte) int {
-	return bytes.Compare(a, b)
 }
