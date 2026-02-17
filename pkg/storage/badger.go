@@ -1,0 +1,491 @@
+package storage
+
+import (
+	"bytes"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/dgraph-io/badger/v4"
+)
+
+const (
+	logPrefix       = "log:"
+	levelIndexPrefix = "index:level:"
+	metaPrefix      = "meta:"
+)
+
+// BadgerStorage implements log storage with Badger
+type BadgerStorage struct {
+	db              *badger.DB
+	retentionSize   int64 // in bytes
+	retentionDays   int
+	mu              sync.RWMutex
+	writeCount      int
+	cleanupInterval int
+}
+
+// Config holds storage configuration
+type Config struct {
+	DBPath        string
+	RetentionSize int64 // in bytes (e.g., 1GB = 1073741824)
+	RetentionDays int
+}
+
+// NewBadgerStorage creates a new Badger storage instance
+func NewBadgerStorage(cfg Config) (*BadgerStorage, error) {
+	// Expand home directory
+	dbPath := expandPath(cfg.DBPath)
+
+	// Create directory if it doesn't exist
+	if err := os.MkdirAll(dbPath, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create db directory: %w", err)
+	}
+
+	// Open Badger database
+	opts := badger.DefaultOptions(dbPath)
+	opts.Logger = nil // Disable badger logging
+	opts.SyncWrites = true // Ensure writes are synced to disk
+
+	db, err := badger.Open(opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open badger db: %w", err)
+	}
+	
+	// Run value log garbage collection to ensure data is visible
+	db.RunValueLogGC(0.5)
+
+	s := &BadgerStorage{
+		db:              db,
+		retentionSize:   cfg.RetentionSize,
+		retentionDays:   cfg.RetentionDays,
+		cleanupInterval: 1000, // Run cleanup every 1000 writes
+	}
+
+	// Run initial cleanup
+	if err := s.enforceRetention(); err != nil {
+		return nil, fmt.Errorf("failed to enforce retention: %w", err)
+	}
+
+	return s, nil
+}
+
+// Store saves a log entry
+func (s *BadgerStorage) Store(entry *LogEntry) error {
+	s.mu.Lock()
+	s.writeCount++
+	shouldCleanup := s.writeCount%s.cleanupInterval == 0
+	s.mu.Unlock()
+
+	// Generate key: log:{timestamp}:{id}
+	key := fmt.Sprintf("%s%d:%s", logPrefix, entry.Timestamp.UnixNano(), entry.ID)
+
+	// Serialize entry
+	data, err := entry.ToJSON()
+	if err != nil {
+		return fmt.Errorf("failed to serialize entry: %w", err)
+	}
+
+	// Store in Badger
+	err = s.db.Update(func(txn *badger.Txn) error {
+		// Store main entry
+		if err := txn.Set([]byte(key), data); err != nil {
+			return err
+		}
+
+		// Store level index
+		levelKey := fmt.Sprintf("%s%s:%d:%s", levelIndexPrefix, entry.Level, entry.Timestamp.UnixNano(), entry.ID)
+		if err := txn.Set([]byte(levelKey), []byte(entry.ID)); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to store entry: %w", err)
+	}
+
+	// Periodically run cleanup
+	if shouldCleanup {
+		go s.enforceRetention()
+	}
+
+	return nil
+}
+
+// Query retrieves log entries based on filters
+func (s *BadgerStorage) Query(filter Filter, limit, offset int) ([]*LogEntry, int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var entries []*LogEntry
+	total := 0
+	skipped := 0
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = true
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		prefix := []byte(logPrefix)
+		
+		// Iterate forward through all log entries
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
+			err := item.Value(func(val []byte) error {
+				entry, err := FromJSON(val)
+				if err != nil {
+					return nil // Skip invalid entries
+				}
+
+				// Apply filter
+				if !filter.Match(entry) {
+					return nil
+				}
+
+				total++
+
+				// Handle pagination
+				if skipped < offset {
+					skipped++
+					return nil
+				}
+
+				if len(entries) < limit {
+					entries = append(entries, entry)
+				}
+
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+
+			// Stop if we have enough entries
+			if len(entries) >= limit && skipped >= offset {
+				break
+			}
+		}
+
+		return nil
+	})
+
+	// Reverse to show newest first
+	for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
+		entries[i], entries[j] = entries[j], entries[i]
+	}
+
+	return entries, total, err
+}
+
+// GetStats returns storage statistics
+func (s *BadgerStorage) GetStats() (Stats, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	stats := Stats{
+		Levels: make(map[string]int),
+	}
+
+	// Count total logs and by level
+	err := s.db.View(func(txn *badger.Txn) error {
+		// Count total logs
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		prefix := []byte(logPrefix)
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			stats.TotalLogs++
+		}
+
+		// Count by level
+		levelPrefix := []byte(levelIndexPrefix)
+		it2 := txn.NewIterator(opts)
+		defer it2.Close()
+
+		currentLevel := ""
+		for it2.Seek(levelPrefix); it2.ValidForPrefix(levelPrefix); it2.Next() {
+			key := string(it2.Item().Key())
+			// Extract level from key: index:level:{LEVEL}:{timestamp}:{id}
+			parts := strings.SplitN(key[len(levelIndexPrefix):], ":", 2)
+			if len(parts) > 0 {
+				level := parts[0]
+				if level != currentLevel {
+					currentLevel = level
+				}
+				stats.Levels[level]++
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return stats, err
+	}
+
+	// Get DB size
+	lsm, vlog := s.db.Size()
+	stats.DBSizeMB = float64(lsm+vlog) / (1024 * 1024)
+
+	return stats, nil
+}
+
+// enforceRetention removes old entries based on retention policy
+func (s *BadgerStorage) enforceRetention() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Check size-based retention
+	lsm, vlog := s.db.Size()
+	currentSize := lsm + vlog
+
+	if s.retentionSize > 0 && currentSize > s.retentionSize {
+		// Delete oldest entries
+		return s.deleteOldestEntries(int(float64(currentSize-s.retentionSize) * 1.2)) // Delete 20% more to have buffer
+	}
+
+	// Check time-based retention
+	if s.retentionDays > 0 {
+		cutoff := time.Now().AddDate(0, 0, -s.retentionDays)
+		return s.deleteEntriesOlderThan(cutoff)
+	}
+
+	return nil
+}
+
+// deleteOldestEntries deletes approximately targetBytes worth of oldest entries
+func (s *BadgerStorage) deleteOldestEntries(targetBytes int) error {
+	var keysToDelete [][]byte
+	deletedSize := 0
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		prefix := []byte(logPrefix)
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
+			keysToDelete = append(keysToDelete, item.KeyCopy(nil))
+			deletedSize += int(item.EstimatedSize())
+
+			if deletedSize >= targetBytes {
+				break
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	// Delete keys in batches
+	return s.db.Update(func(txn *badger.Txn) error {
+		for _, key := range keysToDelete {
+			if err := txn.Delete(key); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// deleteEntriesOlderThan deletes entries older than the cutoff time
+func (s *BadgerStorage) deleteEntriesOlderThan(cutoff time.Time) error {
+	cutoffNano := cutoff.UnixNano()
+	var keysToDelete [][]byte
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		prefix := []byte(logPrefix)
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			key := string(it.Item().Key())
+			// Extract timestamp from key: log:{timestamp}:{id}
+			parts := strings.SplitN(key[len(logPrefix):], ":", 2)
+			if len(parts) >= 1 {
+				var ts int64
+				fmt.Sscanf(parts[0], "%d", &ts)
+				if ts < cutoffNano {
+					keysToDelete = append(keysToDelete, it.Item().KeyCopy(nil))
+				}
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	// Delete keys in batches
+	return s.db.Update(func(txn *badger.Txn) error {
+		for _, key := range keysToDelete {
+			if err := txn.Delete(key); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// Close closes the database
+func (s *BadgerStorage) Close() error {
+	return s.db.Close()
+}
+
+// Sync syncs the database to disk
+func (s *BadgerStorage) Sync() error {
+	return s.db.Sync()
+}
+
+// Stats represents storage statistics
+type Stats struct {
+	TotalLogs int            `json:"total_logs"`
+	DBSizeMB  float64        `json:"db_size_mb"`
+	Levels    map[string]int `json:"levels"`
+}
+
+// Filter represents a query filter
+type Filter interface {
+	Match(entry *LogEntry) bool
+}
+
+// expandPath expands ~ to home directory
+func expandPath(path string) string {
+	if strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			return filepath.Join(home, path[2:])
+		}
+	}
+	return path
+}
+
+// AllFilter matches all entries
+type AllFilter struct{}
+
+func (f AllFilter) Match(entry *LogEntry) bool {
+	return true
+}
+
+// LevelFilter matches entries by level
+type LevelFilter struct {
+	Level string
+}
+
+func (f LevelFilter) Match(entry *LogEntry) bool {
+	return entry.Level == f.Level
+}
+
+// Scan iterates over all log entries
+func (s *BadgerStorage) Scan(callback func(*LogEntry) error) error {
+	return s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = true
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		prefix := []byte(logPrefix)
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			item := it.Item()
+			err := item.Value(func(val []byte) error {
+				entry, err := FromJSON(val)
+				if err != nil {
+					return nil // Skip invalid entries
+				}
+				return callback(entry)
+			})
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// Subscribe creates a channel for real-time log updates
+func (s *BadgerStorage) Subscribe(filter Filter) (<-chan *LogEntry, func()) {
+	ch := make(chan *LogEntry, 100)
+	done := make(chan struct{})
+
+	go func() {
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		defer close(ch)
+
+		lastCheck := time.Now()
+
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				// Query for new entries since last check
+				now := time.Now()
+				err := s.db.View(func(txn *badger.Txn) error {
+					opts := badger.DefaultIteratorOptions
+					opts.Reverse = true
+					it := txn.NewIterator(opts)
+					defer it.Close()
+
+					// Start from newest
+					prefix := []byte(logPrefix)
+					for it.Seek(append(prefix, 0xFF)); it.ValidForPrefix(prefix); it.Next() {
+						item := it.Item()
+						err := item.Value(func(val []byte) error {
+							entry, err := FromJSON(val)
+							if err != nil {
+								return nil
+							}
+
+							// Only send entries newer than last check
+							if entry.Timestamp.After(lastCheck) && filter.Match(entry) {
+								select {
+								case ch <- entry:
+								default:
+									// Channel full, skip
+								}
+							}
+
+							return nil
+						})
+						if err != nil {
+							return err
+						}
+					}
+					return nil
+				})
+				if err != nil {
+					// Log error but continue
+				}
+				lastCheck = now
+			}
+		}
+	}()
+
+	cancel := func() {
+		close(done)
+	}
+
+	return ch, cancel
+}
+
+// CompareBytes compares two byte slices
+func compareBytes(a, b []byte) int {
+	return bytes.Compare(a, b)
+}

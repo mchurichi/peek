@@ -1,0 +1,15 @@
+[storage]
+retention_size = "1GB"      # 100MB to 10GB
+retention_days = 7          # 1 to 90 days
+db_path = "~/.peek/db"
+
+[server]
+port = 8080
+auto_open_browser = true
+
+[parsing]
+format = "auto"             # auto, json, slog
+auto_timestamp = true       # Add timestamp if missing
+
+[logging]
+level = "info"              # info, debug, error
