@@ -6,8 +6,8 @@ A minimalist, dev-first CLI log collector and web UI. Pipe logs into `peek`, sto
 $ kubectl logs -l app=frontdesk -w | peek
 
 2026/02/18 02:30:20 Starting collect mode...
-2026/02/18 02:30:20 Web UI available at http://localhost:8081
-2026/02/18 02:30:20 Starting server on http://localhost:8081
+2026/02/18 02:30:20 Web UI available at http://localhost:8080
+2026/02/18 02:30:20 Starting server on http://localhost:8080
 ```
 
 ![Peek — Lucene query filtering errors and warnings across microservices](docs/screenshot.png)
@@ -15,7 +15,7 @@ $ kubectl logs -l app=frontdesk -w | peek
 ## Features
 
 - 🚀 **Single binary** - No external dependencies
-- 📊 **JSON & slog support** - Auto-detects log formats
+- 📊 **Structured log support** - Auto-detects JSON and logfmt (key-value) formats
 - 💾 **Local storage** - BadgerDB with configurable retention
 - 🔍 **Lucene queries** - Powerful search syntax
 - ⚡ **Real-time updates** - WebSocket streaming
@@ -74,12 +74,14 @@ Collects logs from stdin and starts an embedded web UI for real-time viewing:
 cat app.log | peek [OPTIONS]
 
 Options:
+  --config FILE          Path to config file (default: ~/.peek/config.toml)
   --db-path PATH         Database path (default: ~/.peek/db)
   --retention-size SIZE  Max storage (e.g., 1GB, 500MB)
   --retention-days DAYS  Max age of logs (default: 7)
-  --format FORMAT        auto | json | slog (default: auto)
+  --format FORMAT        auto | json | logfmt (default: auto)
   --port PORT            HTTP port for embedded web UI (default: 8080)
   --no-browser           Don't auto-open browser
+  --help                 Show help
 ```
 
 ### Server Mode
@@ -90,9 +92,11 @@ Browse previously collected logs (no stdin required):
 peek server [OPTIONS]
 
 Options:
+  --config FILE      Path to config file (default: ~/.peek/config.toml)
   --db-path PATH    Database path (default: ~/.peek/db)
   --port PORT       HTTP port (default: 8080)
   --no-browser      Don't auto-open browser
+  --help             Show help
 ```
 
 ## Query Syntax
@@ -126,9 +130,9 @@ message:"connection refused"
 
 ## Log Formats
 
-Peek supports JSON and Go slog formats with auto-detection:
+Peek supports structured log formats with auto-detection. The JSON parser accepts common field names (`timestamp`/`time`, `message`/`msg`, `level`/`severity`).
 
-### JSON Format
+### JSON
 ```json
 {
   "timestamp": "2026-02-17T10:30:45Z",
@@ -139,15 +143,9 @@ Peek supports JSON and Go slog formats with auto-detection:
 }
 ```
 
-### Slog Format
-```json
-{
-  "time": "2026-02-17T10:30:45Z",
-  "level": "ERROR",
-  "msg": "Connection timeout",
-  "service": "api",
-  "attempt": 3
-}
+### Logfmt (key-value pairs)
+```
+time=2026-02-17T10:30:45Z level=ERROR msg="Connection timeout" service=api attempt=3
 ```
 
 ## Configuration
@@ -174,85 +172,10 @@ level = "info"
 
 CLI flags override config file values.
 
-## Architecture
+## Architecture & API
 
-```
-┌──────────────────────────────────────────────────┐
-│  cat app.log | peek              (single process) │
-│  Collect + Embedded Server                        │
-├──────────────────┬───────────────────────────────┤
-│  stdin → Parser  │  Embedded HTTP Server         │
-│  ├─ JSON/slog    │  localhost:8080               │
-│  ├─ Validate     │  ├─ GET /health               │
-│  └─ Store ───────┼──├─ WS /logs (real-time push) │
-│                  │  ├─ POST /query               │
-│                  │  ├─ GET /stats                │
-│                  │  └─ Web UI                    │
-└──────────────────┴───────────────────────────────┘
-                   │
-                   ↓
-        ┌──────────────────────┐
-        │ Badger Database      │
-        │ ~/.peek/db           │
-        │ Retention enforced   │
-        └──────────────────────┘
-                   ↑
-                   │
-        ┌──────────────────────┐
-        │ peek server          │
-        │ (standalone mode)    │
-        │ Browse collected logs│
-        └──────────────────────┘
-```
-
-## API Endpoints
-
-### GET /health
-Health check endpoint
-```json
-{
-  "status": "ok",
-  "logs_stored": 12534,
-  "db_size_bytes": 245235000
-}
-```
-
-### GET /stats
-Statistics endpoint
-```json
-{
-  "total_logs": 12534,
-  "db_size_mb": 234.5,
-  "levels": {
-    "ERROR": 245,
-    "WARN": 1234,
-    "INFO": 10320,
-    "DEBUG": 735
-  }
-}
-```
-
-### POST /query
-Execute a query
-```json
-{
-  "query": "level:ERROR AND service:api",
-  "limit": 100,
-  "offset": 0
-}
-```
-
-Response:
-```json
-{
-  "logs": [...],
-  "total": 5000,
-  "took_ms": 45
-}
-```
-
-### WS /logs
-WebSocket endpoint for real-time log streaming
+Peek runs as a single process that reads stdin, stores logs locally, and serves a web UI.
+Full architecture and API details are in [docs/README.md](docs/README.md).
 
 ## Examples
 
@@ -309,26 +232,9 @@ peek/
 └── go.mod
 ```
 
-## Performance
+## Performance & Roadmap
 
-- **Collect**: 1K+ logs/sec
-- **Query**: 100K logs in <500ms
-- **Storage**: Efficient compression with BadgerDB
-- **Binary**: <20MB
-
-## Roadmap
-
-### Phase 2 (Future)
-- ~~Multiple collectors support~~ ✅ Collect + server run in a single process
-- Log export/download
-- Advanced analytics
-- TLS/HTTPS support
-
-### Phase 3 (Future)
-- Multi-user support
-- Authentication/authorization
-- Additional log formats
-- Advanced visualizations
+Performance notes and the roadmap live in [docs/README.md](docs/README.md).
 
 ## Contributing
 
