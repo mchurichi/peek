@@ -176,9 +176,9 @@ func TestLoad_HomeDirectoryExpansion(t *testing.T) {
 		t.Skip("Cannot get user home directory")
 	}
 
-	// Create config in home directory subdirectory (simulated)
-	configDir := filepath.Join(home, ".peek-test-config")
-	err = os.MkdirAll(configDir, 0755)
+	// Create a unique temp directory under home so we never collide
+	// with pre-existing data or concurrent test runs.
+	configDir, err := os.MkdirTemp(home, ".peek-test-config-*")
 	if err != nil {
 		t.Skip("Cannot create test config directory")
 	}
@@ -194,8 +194,9 @@ retention_size = "1GB"
 		t.Skip("Cannot create test config file")
 	}
 
-	// Load with ~ path
-	tildeConfigPath := "~/.peek-test-config/config.toml"
+	// Load with ~ path — only the directory basename varies
+	dirName := filepath.Base(configDir)
+	tildeConfigPath := "~/" + dirName + "/config.toml"
 	cfg, err := Load(tildeConfigPath)
 	if err != nil {
 		t.Fatalf("Load() with ~ path error = %v", err)
