@@ -124,8 +124,7 @@ EXAMPLES:
     # Custom configuration
     peek server --port 9000 --db-path /tmp/peek-db
 
-For more information: https://github.com/mchurichi/peek
-`)
+For more information: https://github.com/mchurichi/peek`)
 }
 
 func isStdinPiped() bool {
