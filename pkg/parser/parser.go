@@ -89,7 +89,7 @@ func (p *JSONParser) Parse(line string) (*storage.LogEntry, error) {
 	return entry, nil
 }
 
-// SlogParser handles Go slog format
+// SlogParser handles Go slog format (JSON-based)
 type SlogParser struct{}
 
 // NewSlogParser creates a new slog parser
@@ -97,7 +97,7 @@ func NewSlogParser() *SlogParser {
 	return &SlogParser{}
 }
 
-// CanParse checks if the line is valid JSON (slog is JSON-based)
+// CanParse checks if the line is valid JSON with slog fields
 func (p *SlogParser) CanParse(line string) bool {
 	var obj map[string]interface{}
 	if err := json.Unmarshal([]byte(line), &obj); err != nil {
@@ -109,10 +109,149 @@ func (p *SlogParser) CanParse(line string) bool {
 	return hasTime && hasMsg
 }
 
-// Parse parses a slog format line
+// Parse parses a slog JSON format line
 func (p *SlogParser) Parse(line string) (*storage.LogEntry, error) {
 	// Slog uses the same structure as JSON, just with specific field names
 	return NewJSONParser().Parse(line)
+}
+
+// LogfmtParser handles key=value log format (Go slog text, logfmt)
+type LogfmtParser struct{}
+
+// NewLogfmtParser creates a new logfmt parser
+func NewLogfmtParser() *LogfmtParser {
+	return &LogfmtParser{}
+}
+
+// CanParse checks if the line looks like logfmt (key=value pairs)
+func (p *LogfmtParser) CanParse(line string) bool {
+	// Must contain at least a msg= or level= to be logfmt
+	has := func(key string) bool {
+		return strings.Contains(line, key+"=")
+	}
+	return has("msg") || (has("level") && (has("source") || has("time") || has("error")))
+}
+
+// Parse parses a logfmt line into a LogEntry
+func (p *LogfmtParser) Parse(line string) (*storage.LogEntry, error) {
+	fields := parseLogfmt(line)
+
+	entry := &storage.LogEntry{
+		ID:     generateID(),
+		Fields: make(map[string]interface{}),
+		Raw:    line,
+	}
+
+	// Extract timestamp
+	if ts, ok := fields["time"]; ok {
+		if t, err := time.Parse(time.RFC3339Nano, ts); err == nil {
+			entry.Timestamp = t
+		} else if t, err := time.Parse(time.RFC3339, ts); err == nil {
+			entry.Timestamp = t
+		}
+		delete(fields, "time")
+	}
+	if entry.Timestamp.IsZero() {
+		if ts, ok := fields["timestamp"]; ok {
+			if t, err := time.Parse(time.RFC3339Nano, ts); err == nil {
+				entry.Timestamp = t
+			}
+			delete(fields, "timestamp")
+		}
+	}
+	if entry.Timestamp.IsZero() {
+		entry.Timestamp = time.Now()
+	}
+
+	// Extract level
+	if level, ok := fields["level"]; ok {
+		entry.Level = NormalizeLevel(level)
+		delete(fields, "level")
+	} else {
+		entry.Level = "INFO"
+	}
+
+	// Extract message
+	if msg, ok := fields["msg"]; ok {
+		entry.Message = msg
+		delete(fields, "msg")
+	} else if msg, ok := fields["message"]; ok {
+		entry.Message = msg
+		delete(fields, "message")
+	}
+
+	// Remaining fields
+	for k, v := range fields {
+		entry.Fields[k] = v
+	}
+
+	return entry, nil
+}
+
+// parseLogfmt parses a logfmt-style line into key-value pairs.
+// Handles: key=value, key="quoted value", key="value with \"escapes\""
+func parseLogfmt(line string) map[string]string {
+	result := make(map[string]string)
+	i := 0
+	n := len(line)
+
+	for i < n {
+		// Skip whitespace
+		for i < n && line[i] == ' ' {
+			i++
+		}
+		if i >= n {
+			break
+		}
+
+		// Read key
+		keyStart := i
+		for i < n && line[i] != '=' && line[i] != ' ' {
+			i++
+		}
+		if i >= n || line[i] != '=' {
+			continue
+		}
+		key := line[keyStart:i]
+		i++ // skip '='
+
+		if i >= n {
+			result[key] = ""
+			break
+		}
+
+		// Read value
+		var value string
+		if line[i] == '"' {
+			// Quoted value
+			i++ // skip opening quote
+			var b strings.Builder
+			for i < n {
+				if line[i] == '\\' && i+1 < n {
+					b.WriteByte(line[i+1])
+					i += 2
+				} else if line[i] == '"' {
+					i++ // skip closing quote
+					break
+				} else {
+					b.WriteByte(line[i])
+					i++
+				}
+			}
+			value = b.String()
+		} else {
+			// Unquoted value
+			valStart := i
+			for i < n && line[i] != ' ' {
+				i++
+			}
+			value = line[valStart:i]
+		}
+
+		result[key] = value
+	}
+
+	return result
 }
 
 // generateID creates a unique ID for a log entry

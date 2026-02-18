@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	logPrefix       = "log:"
+	logPrefix        = "log:"
 	levelIndexPrefix = "index:level:"
-	metaPrefix      = "meta:"
+	metaPrefix       = "meta:"
 )
 
 // BadgerStorage implements log storage with Badger
@@ -48,14 +48,14 @@ func NewBadgerStorage(cfg Config) (*BadgerStorage, error) {
 
 	// Open Badger database
 	opts := badger.DefaultOptions(dbPath)
-	opts.Logger = nil // Disable badger logging
+	opts.Logger = nil      // Disable badger logging
 	opts.SyncWrites = true // Ensure writes are synced to disk
 
 	db, err := badger.Open(opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open badger db: %w", err)
 	}
-	
+
 	// Run value log garbage collection in background
 	go func() {
 		db.RunValueLogGC(0.5)
@@ -74,7 +74,7 @@ func NewBadgerStorage(cfg Config) (*BadgerStorage, error) {
 	if err := s.enforceRetention(); err != nil {
 		return nil, fmt.Errorf("failed to enforce retention: %w", err)
 	}
-	
+
 	// Start background cleanup worker
 	go s.cleanupWorker()
 
@@ -147,7 +147,7 @@ func (s *BadgerStorage) Query(filter Filter, limit, offset int) ([]*LogEntry, in
 		defer it.Close()
 
 		prefix := []byte(logPrefix)
-		
+
 		// Iterate forward through all log entries
 		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
 			item := it.Item()
@@ -188,11 +188,6 @@ func (s *BadgerStorage) Query(filter Filter, limit, offset int) ([]*LogEntry, in
 
 		return nil
 	})
-
-	// Reverse to show newest first
-	for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
-		entries[i], entries[j] = entries[j], entries[i]
-	}
 
 	return entries, total, err
 }

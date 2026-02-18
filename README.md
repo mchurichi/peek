@@ -28,9 +28,9 @@ go install github.com/mchurichi/peek/cmd/peek@latest
 
 ## Quick Start
 
-### Collect Logs
+### Collect & View in Real Time
 
-Pipe logs from any source:
+Pipe logs from any source — the web UI starts automatically:
 
 ```bash
 # From a file
@@ -41,21 +41,26 @@ docker logs my-container | peek
 
 # From kubectl
 kubectl logs my-pod -f | peek
+
+# With a custom port
+kubectl logs my-pod -f | peek --port 8081
 ```
 
-### View Logs
+The browser auto-opens to `http://localhost:8080`. Logs stream to the UI in real time via WebSocket. After stdin closes, the server stays alive so you can keep browsing — press `Ctrl+C` to exit.
 
-Start the web UI:
+### Browse Previously Collected Logs
+
+Start the web UI in standalone server mode:
 
 ```bash
 peek server
 ```
 
-The browser will auto-open to `http://localhost:8080`
-
 ## Usage
 
 ### Collect Mode
+
+Collects logs from stdin and starts an embedded web UI for real-time viewing:
 
 ```bash
 cat app.log | peek [OPTIONS]
@@ -65,9 +70,13 @@ Options:
   --retention-size SIZE  Max storage (e.g., 1GB, 500MB)
   --retention-days DAYS  Max age of logs (default: 7)
   --format FORMAT        auto | json | slog (default: auto)
+  --port PORT            HTTP port for embedded web UI (default: 8080)
+  --no-browser           Don't auto-open browser
 ```
 
 ### Server Mode
+
+Browse previously collected logs (no stdin required):
 
 ```bash
 peek server [OPTIONS]
@@ -160,14 +169,19 @@ CLI flags override config file values.
 ## Architecture
 
 ```
-┌──────────────────────────────────────┐
-│  cat app.log | peek                  │
-│  Collect Mode (stdin)                │
-└──────────────────┬───────────────────┘
+┌──────────────────────────────────────────────────┐
+│  cat app.log | peek              (single process) │
+│  Collect + Embedded Server                        │
+├──────────────────┬───────────────────────────────┤
+│  stdin → Parser  │  Embedded HTTP Server         │
+│  ├─ JSON/slog    │  localhost:8080               │
+│  ├─ Validate     │  ├─ GET /health               │
+│  └─ Store ───────┼──├─ WS /logs (real-time push) │
+│                  │  ├─ POST /query               │
+│                  │  ├─ GET /stats                │
+│                  │  └─ Web UI                    │
+└──────────────────┴───────────────────────────────┘
                    │
-                   ├─ Parse (JSON/slog)
-                   ├─ Validate & structure
-                   └─ Write to Badger
                    ↓
         ┌──────────────────────┐
         │ Badger Database      │
@@ -178,18 +192,8 @@ CLI flags override config file values.
                    │
         ┌──────────────────────┐
         │ peek server          │
-        │ localhost:8080       │
-        ├──────────────────────┤
-        │ HTTP API:            │
-        │ - GET /health        │
-        │ - WS /logs           │
-        │ - POST /query        │
-        │ - GET /stats         │
-        ├──────────────────────┤
-        │ Web UI:              │
-        │ - Search (Lucene)    │
-        │ - Live log stream    │
-        │ - Real-time updates  │
+        │ (standalone mode)    │
+        │ Browse collected logs│
         └──────────────────────┘
 ```
 
@@ -244,13 +248,13 @@ WebSocket endpoint for real-time log streaming
 
 ## Examples
 
-### Collect from multiple sources
+### Collect and view in real time
 
 ```bash
-# Collect from application
-cat app.log | peek
+# Collect + view in one command
+kubectl logs my-pod -f | peek --port 8081
 
-# Start server and view
+# Browse logs after collection ends
 peek server
 
 # Collect more logs (same database)
@@ -307,7 +311,7 @@ peek/
 ## Roadmap
 
 ### Phase 2 (Future)
-- Multiple collectors support
+- ~~Multiple collectors support~~ ✅ Collect + server run in a single process
 - Log export/download
 - Advanced analytics
 - TLS/HTTPS support

@@ -32,7 +32,7 @@ func main() {
 	// Check for subcommand first
 	args := os.Args[1:]
 	mode := "collect" // Default mode
-	
+
 	if len(args) > 0 && args[0] == "server" {
 		mode = "server"
 		// Remove "server" from args and reparse flags
@@ -98,8 +98,8 @@ func printHelp() {
 	fmt.Println(`Peek - Minimalist Log Collector & Viewer
 
 USAGE:
-    cat app.log | peek [OPTIONS]        Collect logs from stdin
-    peek server [OPTIONS]                Start web server
+    cat app.log | peek [OPTIONS]        Collect logs from stdin (+ embedded web UI)
+    peek server [OPTIONS]                Start web server (browse previously collected logs)
 
 OPTIONS:
     --config FILE          Path to config file (default: ~/.peek/config.toml)
@@ -107,15 +107,18 @@ OPTIONS:
     --retention-size SIZE  Max storage (e.g., 1GB, 500MB)
     --retention-days DAYS  Max age of logs (e.g., 7, 30)
     --format FORMAT        auto | json | slog (default: auto)
-    --port PORT            HTTP port (default: 8080)
+    --port PORT            HTTP port for web UI (default: 8080, works in both modes)
     --no-browser           Don't auto-open browser
     --help                 Show this help
 
 EXAMPLES:
-    # Collect logs from application
+    # Collect and view logs in real time
     cat app.log | peek
 
-    # Start web UI
+    # Collect from a running process with custom port
+    kubectl logs my-pod -f | peek --port 8081
+
+    # Browse previously collected logs
     peek server
 
     # Custom configuration
@@ -133,7 +136,7 @@ func isStdinPiped() bool {
 func runCollectMode(cfg *config.Config) error {
 	log.Println("Starting collect mode...")
 
-	// Initialize storage
+	// Initialize storage (single instance shared with embedded server)
 	storageCfg := storage.Config{
 		DBPath:        expandPath(cfg.Storage.DBPath),
 		RetentionSize: cfg.GetRetentionSizeBytes(),
@@ -145,6 +148,23 @@ func runCollectMode(cfg *config.Config) error {
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}
 	defer db.Close()
+
+	// Start embedded server for real-time viewing
+	srv := server.NewServer(db)
+	srv.StartBroadcastWorker()
+
+	go func() {
+		if err := srv.Start(cfg.Server.Port); err != nil {
+			log.Printf("Server error: %v", err)
+		}
+	}()
+
+	if cfg.Server.AutoOpenBrowser {
+		url := fmt.Sprintf("http://localhost:%d", cfg.Server.Port)
+		go openBrowser(url)
+	}
+
+	log.Printf("Web UI available at http://localhost:%d", cfg.Server.Port)
 
 	// Initialize parser
 	detector := parser.NewDetector()
@@ -172,6 +192,9 @@ func runCollectMode(cfg *config.Config) error {
 			continue
 		}
 
+		// Broadcast to connected WebSocket clients in real time
+		srv.BroadcastLog(entry)
+
 		count++
 		if count%1000 == 0 {
 			log.Printf("Collected %d log entries", count)
@@ -189,6 +212,13 @@ func runCollectMode(cfg *config.Config) error {
 	}
 
 	log.Printf("Collection complete. Total entries: %d", count)
+	log.Printf("Server still running at http://localhost:%d — press Ctrl+C to exit", cfg.Server.Port)
+
+	// Keep server alive after stdin closes so user can still browse logs
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	<-sigChan
+	log.Println("Shutting down...")
 	return nil
 }
 

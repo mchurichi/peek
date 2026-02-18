@@ -16,8 +16,9 @@ type Detector struct {
 func NewDetector() *Detector {
 	return &Detector{
 		parsers: []Parser{
-			NewSlogParser(), // Try slog first (more specific)
-			NewJSONParser(), // Then generic JSON
+			NewSlogParser(),   // Try slog JSON first (most specific)
+			NewLogfmtParser(), // Then logfmt/slog text (key=value)
+			NewJSONParser(),   // Then generic JSON
 		},
 	}
 }
@@ -51,6 +52,8 @@ func (d *Detector) ParseWithFormat(line, format string) (*storage.LogEntry, erro
 		parser = NewJSONParser()
 	case "slog":
 		parser = NewSlogParser()
+	case "logfmt":
+		parser = NewLogfmtParser()
 	case "auto":
 		return d.Parse(line)
 	default:

@@ -5,11 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Peek - Log Viewer</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
@@ -26,31 +22,22 @@
             border-bottom: 2px solid #3d3d3d;
         }
 
-        h1 {
-            font-size: 1.5rem;
-            color: #4CAF50;
-            margin-bottom: 1rem;
-        }
+        h1 { font-size: 1.5rem; color: #4CAF50; margin-bottom: 1rem; }
 
-        .search-bar {
-            display: flex;
-            gap: 0.5rem;
-        }
+        .search-bar { display: flex; gap: 0.5rem; }
 
-        #queryInput {
+        .search-bar input {
             flex: 1;
             padding: 0.75rem;
             background: #1a1a1a;
             border: 1px solid #4d4d4d;
             color: #e0e0e0;
             border-radius: 4px;
+            font-family: ui-monospace, 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Courier New', monospace;
             font-size: 1rem;
         }
 
-        #queryInput:focus {
-            outline: none;
-            border-color: #4CAF50;
-        }
+        .search-bar input:focus { outline: none; border-color: #4CAF50; }
 
         button {
             padding: 0.75rem 1.5rem;
@@ -63,14 +50,22 @@
             transition: background 0.2s;
         }
 
-        button:hover {
-            background: #45a049;
+        button:hover { background: #45a049; }
+        button:disabled { background: #666; cursor: not-allowed; }
+
+        .clear-btn {
+            padding: 0.75rem 1rem;
+            background: #333;
+            color: #888;
+            border: 1px solid #4d4d4d;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            line-height: 1;
+            transition: color 0.2s;
         }
 
-        button:disabled {
-            background: #666;
-            cursor: not-allowed;
-        }
+        .clear-btn:hover { color: #ef5350; }
 
         main {
             flex: 1;
@@ -82,104 +77,187 @@
 
         .stats {
             display: flex;
-            gap: 1rem;
-            margin-bottom: 1rem;
-            font-size: 0.9rem;
-            color: #999;
+            gap: 0.75rem;
+            margin-top: 0.4rem;
+            font-size: 0.7rem;
+            color: #666;
         }
 
         .stats span {
-            padding: 0.25rem 0.75rem;
-            background: #2d2d2d;
-            border-radius: 4px;
+            padding: 0.1rem 0.5rem;
         }
 
         .log-container {
             flex: 1;
             overflow-y: auto;
+            overflow-x: auto;
             background: #2d2d2d;
             border-radius: 4px;
             border: 1px solid #3d3d3d;
         }
 
-        .log-entry {
-            padding: 0.75rem 1rem;
-            border-bottom: 1px solid #3d3d3d;
-            cursor: pointer;
-            transition: background 0.1s;
+        .table-wrapper {
+            display: inline-block;
+            min-width: 100%;
         }
 
-        .log-entry:hover {
+        .log-table {
+            width: fit-content;
+            border-collapse: separate;
+            border-spacing: 0;
+            table-layout: fixed;
+            font-family: ui-monospace, 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Courier New', monospace;
+            font-size: 0.82rem;
+            line-height: 1.5;
+        }
+
+        .log-table thead {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            box-shadow: 0 2px 0 #555;
+        }
+
+        .log-table thead th {
             background: #333;
-        }
-
-        .log-header {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            margin-bottom: 0.25rem;
-        }
-
-        .log-timestamp {
             color: #888;
-            font-size: 0.85rem;
-            font-family: 'Courier New', monospace;
+            font-weight: normal;
+            font-size: 0.75rem;
+            text-align: left;
+            padding: 0.3rem 0.5rem;
+            white-space: nowrap;
+            overflow: visible;
         }
+
+        .log-table thead th.col-chevron { width: 1.5ch; min-width: 16px; }
+        .log-table thead th.col-time { width: 17ch; min-width:122px; }
+        .log-table thead th.col-level { width: 6ch; min-width: 43px; }
+        .log-table thead th.col-msg { /* flex fill - no width */ }
+        .log-table thead th.col-pinned {
+            width: 16ch;
+            user-select: none;
+            cursor: grab;
+        }
+
+        .log-table thead th.col-pinned.dragging {
+            opacity: 0.4;
+        }
+
+        .log-table thead th.col-pinned.drag-over {
+            border-left: 2px solid #4CAF50;
+        }
+
+        .col-remove-hdr {
+            color: #555;
+            margin-left: 0.5ch;
+            font-size: 0.65rem;
+            cursor: pointer;
+            padding: 0 0.3ch;
+            border-radius: 2px;
+            vertical-align: middle;
+        }
+
+        .col-remove-hdr:hover {
+            color: #ef5350;
+            background: rgba(239, 83, 80, 0.15);
+        }
+
+        .resize-handle {
+            position: absolute;
+            right: -3px;
+            top: 0;
+            bottom: 0;
+            width: 7px;
+            cursor: col-resize;
+            background: transparent;
+            z-index: 2;
+        }
+
+        .resize-handle:hover,
+        .resize-handle.active { background: #4CAF50; }
+
+        .log-table .log-row td {
+            padding: 0.25rem 0.5rem;
+            border-bottom: 1px solid #2a2a2a;
+            vertical-align: top;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .log-table .log-row { cursor: pointer; transition: background 0.1s; }
+        .log-table .log-row:hover td { background: #2a2a2a; }
+
+        .log-table .detail-row > td {
+            padding: 0.35rem 0.5rem 0.5rem 2.5ch;
+            background: #1a1a1a;
+            border-bottom: 1px solid #2a2a2a;
+            font-size: 0.8rem;
+            color: #999;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .log-table .detail-row { display: none; }
+        .log-table .detail-row.visible { display: table-row; }
+        .log-table .pinned-val { color: #777; }
+
+        .log-chevron {
+            display: inline-block;
+            width: 1.2ch;
+            color: #555;
+            transition: transform 0.15s;
+        }
+
+        .log-timestamp { color: #6a6a6a; }
 
         .log-level {
-            padding: 0.2rem 0.5rem;
-            border-radius: 3px;
-            font-size: 0.75rem;
+            display: inline-block;
+            min-width: 5ch;
             font-weight: bold;
-            min-width: 60px;
-            text-align: center;
         }
 
-        .level-ERROR, .level-FATAL {
-            background: #d32f2f;
-            color: white;
+        .level-ERROR, .level-FATAL { color: #ef5350; }
+        .level-WARN, .level-WARNING { color: #ffa726; }
+        .level-INFO { color: #42a5f5; }
+        .level-DEBUG { color: #616161; }
+        .level-TRACE { color: #424242; }
+        .log-message { color: #c8c8c8; }
+
+        .fields-table {
+            border-collapse: collapse;
+            margin-top: 0.25rem;
+            width: auto;
+            table-layout: auto;
+            font-family: ui-monospace, 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Courier New', monospace;
+            font-size: 0.8rem;
         }
 
-        .level-WARN, .level-WARNING {
-            background: #f57c00;
-            color: white;
+        .fields-table td {
+            padding: 0.15rem 0.5rem 0.15rem 0;
+            vertical-align: top;
+            border: none;
         }
 
-        .level-INFO {
-            background: #1976d2;
-            color: white;
+        .fields-table .field-key {
+            color: #888;
+            white-space: nowrap;
+            width: 1%;
+            cursor: pointer;
+            text-decoration: underline;
+            text-decoration-style: dotted;
+            text-underline-offset: 2px;
         }
 
-        .level-DEBUG {
-            background: #616161;
-            color: white;
-        }
+        .fields-table .field-key:hover { color: #4CAF50; }
 
-        .level-TRACE {
-            background: #424242;
-            color: white;
-        }
-
-        .log-message {
-            color: #e0e0e0;
-            margin-bottom: 0.25rem;
-        }
-
-        .log-fields {
-            display: none;
-            margin-top: 0.5rem;
-            padding: 0.5rem;
-            background: #1a1a1a;
-            border-radius: 4px;
-            font-family: 'Courier New', monospace;
-            font-size: 0.85rem;
+        .fields-table .field-val {
             color: #4CAF50;
-            overflow-x: auto;
+            word-break: break-all;
+            cursor: pointer;
         }
 
-        .log-entry.expanded .log-fields {
-            display: block;
-        }
+        .fields-table .field-val:hover { text-decoration: underline; }
 
         .status {
             margin-top: 0.5rem;
@@ -189,24 +267,8 @@
             font-size: 0.9rem;
         }
 
-        .status.connected {
-            color: #4CAF50;
-        }
-
-        .status.error {
-            color: #d32f2f;
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 3rem;
-            color: #666;
-        }
-
-        .empty-state h2 {
-            margin-bottom: 0.5rem;
-            color: #888;
-        }
+        .status.connected { color: #4CAF50; }
+        .status.error { color: #d32f2f; }
 
         .query-examples {
             margin-top: 0.5rem;
@@ -217,252 +279,507 @@
             color: #888;
         }
 
-        .query-examples strong {
-            color: #4CAF50;
-        }
+        .query-examples strong { color: #4CAF50; }
 
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        .log-entry.new {
-            animation: fadeIn 0.3s;
-        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .log-row.new td { animation: fadeIn 0.3s; }
     </style>
 </head>
 <body>
-    <header>
-        <h1>🔍 Peek</h1>
-        <div class="search-bar">
-            <input 
-                type="text" 
-                id="queryInput" 
-                placeholder="Enter query (e.g., level:ERROR, service:api, error timeout...)"
-                autocomplete="off"
-            >
-            <button id="searchBtn">Search</button>
-        </div>
-        <div class="query-examples">
-            <strong>Examples:</strong> 
-            level:ERROR | service:auth | timestamp:[now-1h TO now] | level:ERROR AND service:api | message:*timeout*
-        </div>
-    </header>
+    <script type="module">
+        // ──────────────────────────────────────────
+        // Van.js — ~1KB reactive UI framework
+        // ──────────────────────────────────────────
+        import van from "https://cdn.jsdelivr.net/npm/vanjs-core@1.5.2/src/van.min.js"
 
-    <main>
-        <div class="stats">
-            <span id="totalLogs">Total: 0</span>
-            <span id="filteredLogs">Filtered: 0</span>
-            <span id="wsStatus">⚫ Disconnected</span>
-        </div>
+        const {div, h1, header: hdr, main: mn, input, button, span, label, strong,
+               table, thead, tbody, tr, td, th, br} = van.tags
 
-        <div class="log-container" id="logContainer">
-            <div class="empty-state">
-                <h2>No logs yet</h2>
-                <p>Waiting for log entries...</p>
-            </div>
-        </div>
+        // ──────────────────────────────────────────
+        // State
+        // ──────────────────────────────────────────
+        const logs        = van.state([])
+        const pinned      = van.state([])     // pinned column field names
+        const query       = van.state("")
+        const wsStatus    = van.state("disconnected")
+        const statusText  = van.state("")
+        const totalCount  = van.state(0)
+        const autoScroll  = van.state(true)
+        const searching   = van.state(false)
 
-        <div class="status" id="status"></div>
-    </main>
+        let ws = null
+        let queryInputEl = null
+        let logContainerEl = null
 
-    <script>
-        const queryInput = document.getElementById('queryInput');
-        const searchBtn = document.getElementById('searchBtn');
-        const logContainer = document.getElementById('logContainer');
-        const totalLogsEl = document.getElementById('totalLogs');
-        const filteredLogsEl = document.getElementById('filteredLogs');
-        const wsStatusEl = document.getElementById('wsStatus');
-        const statusEl = document.getElementById('status');
+        // ──────────────────────────────────────────
+        // Helpers
+        // ──────────────────────────────────────────
+        const pad = n => String(n).padStart(2, "0")
+        const fmtTime = ts => {
+            const d = new Date(ts)
+            return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+        }
 
-        let ws = null;
-        let logs = [];
-        let currentQuery = '';
+        // ──────────────────────────────────────────
+        // API & WebSocket
+        // ──────────────────────────────────────────
+        async function executeQuery() {
+            const q = queryInputEl?.value?.trim() || ""
+            query.val = q
+            searching.val = true
+            statusText.val = "Searching..."
 
-        // Connect to WebSocket
+            try {
+                const res = await fetch("/query", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({query: q || "*", limit: 100, offset: 0})
+                })
+                const data = await res.json()
+                logs.val = data.logs || []
+                totalCount.val = data.total
+                statusText.val = `Found ${data.total} logs in ${data.took_ms}ms`
+
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({action: "subscribe", query: q || "*"}))
+                }
+            } catch (e) {
+                console.error("Query error:", e)
+                statusText.val = "Error executing query"
+            } finally {
+                searching.val = false
+            }
+        }
+
         function connectWebSocket() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/logs`;
-            
-            ws = new WebSocket(wsUrl);
+            const proto = location.protocol === "https:" ? "wss:" : "ws:"
+            ws = new WebSocket(`${proto}//${location.host}/logs`)
 
             ws.onopen = () => {
-                console.log('WebSocket connected');
-                wsStatusEl.innerHTML = '🟢 Connected';
-                wsStatusEl.className = 'connected';
-                
-                // Subscribe to current query
-                if (currentQuery) {
-                    ws.send(JSON.stringify({
-                        action: 'subscribe',
-                        query: currentQuery
-                    }));
-                } else {
-                    ws.send(JSON.stringify({
-                        action: 'subscribe',
-                        query: '*'
-                    }));
+                wsStatus.val = "connected"
+                ws.send(JSON.stringify({action: "subscribe", query: query.val || "*"}))
+            }
+            ws.onmessage = ev => {
+                const data = JSON.parse(ev.data)
+                if (data.type === "log") {
+                    if (logs.val.some(e => e.id === data.entry.id)) return
+                    logs.val = [...logs.val, data.entry]
+                    totalCount.val = logs.val.length
+                } else if (data.type === "results") {
+                    logs.val = data.logs || []
+                    totalCount.val = data.total
                 }
-            };
-
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                
-                if (data.type === 'log') {
-                    addLogEntry(data.entry, true);
-                } else if (data.type === 'results') {
-                    displayResults(data.logs, data.total);
-                }
-            };
-
-            ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
-                wsStatusEl.innerHTML = '🔴 Error';
-                wsStatusEl.className = 'error';
-            };
-
+            }
+            ws.onerror = () => { wsStatus.val = "error" }
             ws.onclose = () => {
-                console.log('WebSocket disconnected');
-                wsStatusEl.innerHTML = '⚫ Disconnected';
-                wsStatusEl.className = '';
-                
-                // Reconnect after 3 seconds
-                setTimeout(connectWebSocket, 3000);
-            };
-        }
-
-        // Execute query
-        async function executeQuery() {
-            const query = queryInput.value.trim();
-            currentQuery = query;
-
-            searchBtn.disabled = true;
-            statusEl.textContent = 'Searching...';
-
-            try {
-                const response = await fetch('/query', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        query: query || '*',
-                        limit: 100,
-                        offset: 0
-                    })
-                });
-
-                const data = await response.json();
-                displayResults(data.logs, data.total);
-                statusEl.textContent = `Found ${data.total} logs in ${data.took_ms}ms`;
-
-                // Update WebSocket subscription
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({
-                        action: 'subscribe',
-                        query: query || '*'
-                    }));
-                }
-            } catch (error) {
-                console.error('Query error:', error);
-                statusEl.textContent = 'Error executing query';
-                statusEl.className = 'error';
-            } finally {
-                searchBtn.disabled = false;
+                wsStatus.val = "disconnected"
+                setTimeout(connectWebSocket, 3000)
             }
         }
 
-        // Display query results
-        function displayResults(entries, total) {
-            logs = entries || [];
-            logContainer.innerHTML = '';
-
-            if (logs.length === 0) {
-                logContainer.innerHTML = `
-                    <div class="empty-state">
-                        <h2>No logs found</h2>
-                        <p>Try a different query</p>
-                    </div>
-                `;
-            } else {
-                logs.forEach(entry => addLogEntry(entry, false));
-            }
-
-            updateStats(total);
-        }
-
-        // Add a single log entry
-        function addLogEntry(entry, isNew) {
-            const existing = document.querySelector(`[data-id="${entry.id}"]`);
-            if (existing) return; // Don't add duplicates
-
-            const div = document.createElement('div');
-            div.className = `log-entry ${isNew ? 'new' : ''}`;
-            div.dataset.id = entry.id;
-
-            const timestamp = new Date(entry.timestamp).toLocaleString();
-            const fieldsJson = JSON.stringify(entry.fields || {}, null, 2);
-            const hasFields = Object.keys(entry.fields || {}).length > 0;
-
-            div.innerHTML = `
-                <div class="log-header">
-                    <span class="log-timestamp">${timestamp}</span>
-                    <span class="log-level level-${entry.level}">${entry.level}</span>
-                </div>
-                <div class="log-message">${escapeHtml(entry.message)}</div>
-                ${hasFields ? `<div class="log-fields">${escapeHtml(fieldsJson)}</div>` : ''}
-            `;
-
-            div.addEventListener('click', () => {
-                div.classList.toggle('expanded');
-            });
-
-            if (isNew) {
-                logContainer.insertBefore(div, logContainer.firstChild);
-                logs.unshift(entry);
-            } else {
-                logContainer.appendChild(div);
-            }
-
-            updateStats(logs.length);
-        }
-
-        // Update statistics
-        function updateStats(total) {
-            totalLogsEl.textContent = `Total: ${total}`;
-            filteredLogsEl.textContent = `Filtered: ${logs.length}`;
-        }
-
-        // Escape HTML
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        // Load initial stats
         async function loadStats() {
             try {
-                const response = await fetch('/stats');
-                const data = await response.json();
-                updateStats(data.total_logs);
-            } catch (error) {
-                console.error('Failed to load stats:', error);
-            }
+                const res = await fetch("/stats")
+                const data = await res.json()
+                totalCount.val = data.total_logs
+            } catch (e) { console.error("Stats error:", e) }
         }
 
-        // Event listeners
-        searchBtn.addEventListener('click', executeQuery);
-        queryInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                executeQuery();
-            }
-        });
+        // ──────────────────────────────────────────
+        // Actions
+        // ──────────────────────────────────────────
+        function toggleColumn(field) {
+            const cols = pinned.val
+            pinned.val = cols.includes(field)
+                ? cols.filter(c => c !== field)
+                : [...cols, field]
+        }
 
-        // Initialize
-        connectWebSocket();
-        loadStats();
-        executeQuery(); // Load initial logs
+        function filterByField(field, value) {
+            const v = value.includes(" ") ? `"${value}"` : value
+            if (queryInputEl) queryInputEl.value = `${field}:${v}`
+            executeQuery()
+        }
+
+        // ──────────────────────────────────────────
+        // Components
+        // ──────────────────────────────────────────
+
+        // Resize handle — attaches drag behavior to a th element
+        const columnWidths = new Map()  // persist widths across rebuilds
+        function addResizeHandle(thEl, colKey) {
+            thEl.style.position = "relative"
+            if (colKey && columnWidths.has(colKey)) {
+                thEl.style.width = columnWidths.get(colKey)
+            }
+            const handle = document.createElement("div")
+            handle.className = "resize-handle"
+            handle.addEventListener("mousedown", e => {
+                e.preventDefault()
+                e.stopPropagation()
+                
+                const tableEl = thEl.closest("table")
+                const startX = e.pageX
+                const startW = thEl.offsetWidth
+                
+                // Set table to very large width to prevent redistribution
+                if (tableEl) {
+                    console.log("Before resize - table.style.width:", tableEl.style.width, "offsetWidth:", tableEl.offsetWidth)
+                    tableEl.style.setProperty('width', '99999px', 'important')
+                    console.log("After setting 99999px - table.style.width:", tableEl.style.width, "offsetWidth:", tableEl.offsetWidth)
+                }
+                
+                handle.classList.add("active")
+                document.body.style.cursor = "col-resize"
+                document.body.style.userSelect = "none"
+                
+                const onMove = e2 => {
+                    const delta = e2.pageX - startX
+                    const newW = Math.max(40, startW + delta)
+                    thEl.style.width = newW + "px"
+                }
+                
+                const onUp = () => {
+                    handle.classList.remove("active")
+                    document.body.style.cursor = ""
+                    document.body.style.userSelect = ""
+                    document.removeEventListener("mousemove", onMove)
+                    document.removeEventListener("mouseup", onUp)
+                    
+                    // Reset table to fit-content
+                    if (tableEl) {
+                        tableEl.style.removeProperty('width')
+                    }
+                    
+                    // Save column width
+                    if (colKey) {
+                        columnWidths.set(colKey, thEl.style.width)
+                    }
+                }
+                
+                document.addEventListener("mousemove", onMove)
+                document.addEventListener("mouseup", onUp)
+            })
+            thEl.appendChild(handle)
+        }
+                
+                document.addEventListener("mousemove", onMove)
+                document.addEventListener("mouseup", onUp)
+            })
+            thEl.appendChild(handle)
+        }
+
+        // Search bar
+        function SearchBar() {
+            const inp = input({
+                type: "text",
+                placeholder: "Enter query (e.g., level:ERROR, service:api, error timeout...)",
+                autocomplete: "off",
+                onkeypress: e => { if (e.key === "Enter") executeQuery() }
+            })
+            queryInputEl = inp
+
+            return hdr(
+                h1("\u{1F50D} Peek"),
+                div({class: "search-bar"},
+                    inp,
+                    button({class: "clear-btn", title: "Clear search",
+                        onclick: () => { inp.value = ""; executeQuery() }
+                    }, "\u00D7"),
+                    button({onclick: executeQuery}, "Search"),
+                ),
+                div({class: "query-examples"},
+                    strong("Examples: "),
+                    "level:ERROR | service:auth | timestamp:[now-1h TO now] | level:ERROR AND service:api | message:*timeout*"
+                ),
+            )
+        }
+
+        // Stats bar
+        function StatsBar() {
+            return div({class: "stats"},
+                span(() => `Total: ${totalCount.val}`),
+                span(() => `Filtered: ${logs.val.length}`),
+                span(() => {
+                    const s = wsStatus.val
+                    return s === "connected" ? "\u{1F7E2} Connected"
+                         : s === "error"     ? "\u{1F534} Error"
+                         :                     "\u26AB Disconnected"
+                }),
+                label({style: "margin-left:auto; display:flex; align-items:center; gap:0.3rem; cursor:pointer; user-select:none;"},
+                    input({type: "checkbox", checked: true,
+                        style: "accent-color:#4CAF50; cursor:pointer;",
+                        onchange: e => { autoScroll.val = e.target.checked }
+                    }),
+                    " Auto-scroll"
+                ),
+            )
+        }
+
+        // Fields table inside expanded detail row
+        function FieldsTable(entry) {
+            const fields = entry.fields
+            const hasFields = fields && Object.keys(fields).length > 0
+
+            if (!hasFields) {
+                const container = document.createElement("div")
+                const lbl = document.createElement("span")
+                lbl.className = "detail-label"
+                lbl.textContent = "raw"
+                container.appendChild(lbl)
+                container.appendChild(document.createTextNode("\n" + (entry.raw || entry.message || "")))
+                return container
+            }
+
+            return table({class: "fields-table"},
+                ...Object.entries(fields).map(([k, v]) =>
+                    tr(
+                        td({class: "field-key", title: "Click to add as column",
+                            onclick: e => { e.stopPropagation(); toggleColumn(k) }
+                        }, k),
+                        td({class: "field-val", title: `Click to filter ${k}:${v}`,
+                            onclick: e => { e.stopPropagation(); filterByField(k, String(v)) }
+                        }, String(v)),
+                    )
+                )
+            )
+        }
+
+        // Single log row pair (main + detail)
+        function LogRow(entry, isNew) {
+            const expanded = van.state(false)
+            const level = entry.level ? entry.level.toUpperCase() : ""
+
+            // Pinned value cells
+            const pinnedCells = pinned.val.map(col => {
+                const val = entry.fields?.[col] != null ? String(entry.fields[col]) : "-"
+                return td({class: "pinned-val", title: col}, val)
+            })
+
+            const mainRow = tr(
+                {class: `log-row${isNew ? " new" : ""}`, "data-id": entry.id,
+                 onclick: () => { expanded.val = !expanded.val }},
+                td({class: "log-chevron"}, () => expanded.val ? "\u25BE" : "\u25B8"),
+                td({class: "log-timestamp"}, fmtTime(entry.timestamp)),
+                td({class: `log-level${entry.level ? ` level-${entry.level}` : ""}`}, level),
+                td({class: "log-message"}, entry.message),
+                ...pinnedCells,
+            )
+
+            const detailRow = tr(
+                {class: () => `detail-row${expanded.val ? " visible" : ""}`},
+                td({colspan: 4 + pinned.val.length}, FieldsTable(entry)),
+            )
+
+            return [mainRow, detailRow]
+        }
+
+        // Table header with reactive pinned columns
+        function LogTableHeader() {
+            const theadEl = document.createElement("thead")
+
+            function rebuild() {
+                theadEl.innerHTML = ""
+                const row = document.createElement("tr")
+
+                // Fixed columns
+                const cols = [
+                    {cls: "col-chevron", text: ""},
+                    {cls: "col-time", text: "time"},
+                    {cls: "col-level", text: "level"},
+                    {cls: "col-msg", text: "message"},
+                ]
+                for (const c of cols) {
+                    const el = document.createElement("th")
+                    el.className = c.cls
+                    el.textContent = c.text
+                    if (c.cls !== "col-chevron") addResizeHandle(el, c.cls)
+                    row.appendChild(el)
+                }
+
+                // Pinned columns (draggable + remove on X only)
+                let dragSrcCol = null
+                for (const col of pinned.val) {
+                    const el = document.createElement("th")
+                    el.className = "col-pinned"
+                    el.draggable = true
+                    el.dataset.col = col
+
+                    const label = document.createElement("span")
+                    label.textContent = col
+
+                    const removeBtn = document.createElement("span")
+                    removeBtn.className = "col-remove-hdr"
+                    removeBtn.title = "Remove column"
+                    removeBtn.textContent = "\u2715"  // ✕
+                    removeBtn.addEventListener("click", e => {
+                        e.stopPropagation()
+                        toggleColumn(col)
+                    })
+
+                    el.appendChild(label)
+                    el.appendChild(removeBtn)
+
+                    // Drag-and-drop reordering
+                    el.addEventListener("dragstart", e => {
+                        dragSrcCol = col
+                        el.classList.add("dragging")
+                        e.dataTransfer.effectAllowed = "move"
+                    })
+                    el.addEventListener("dragend", () => {
+                        el.classList.remove("dragging")
+                        row.querySelectorAll(".col-pinned").forEach(th => th.classList.remove("drag-over"))
+                    })
+                    el.addEventListener("dragover", e => {
+                        e.preventDefault()
+                        e.dataTransfer.dropEffect = "move"
+                        el.classList.add("drag-over")
+                    })
+                    el.addEventListener("dragleave", () => {
+                        el.classList.remove("drag-over")
+                    })
+                    el.addEventListener("drop", e => {
+                        e.preventDefault()
+                        el.classList.remove("drag-over")
+                        if (dragSrcCol && dragSrcCol !== col) {
+                            const cols = [...pinned.val]
+                            const fromIdx = cols.indexOf(dragSrcCol)
+                            const toIdx = cols.indexOf(col)
+                            cols.splice(fromIdx, 1)
+                            cols.splice(toIdx, 0, dragSrcCol)
+                            pinned.val = cols
+                        }
+                        dragSrcCol = null
+                    })
+
+                    addResizeHandle(el, `pinned-${col}`)
+                    row.appendChild(el)
+                }
+
+                theadEl.appendChild(row)
+            }
+
+            van.derive(() => { pinned.val; rebuild() })
+            rebuild()
+            return theadEl
+        }
+
+        // Table body — incremental append, full rebuild on query/column change
+        function LogTableBody() {
+            const tbodyEl = document.createElement("tbody")
+            const renderedIds = new Set()
+            let lastLogRef = null  // track array identity for full resets
+            let lastPinnedRef = null  // track pinned columns for full resets
+            const expandedIds = new Set()  // track expanded rows across rebuilds
+
+            van.derive(() => {
+                const entries = logs.val
+                const cols = pinned.val
+
+                // Force full rebuild when logs change or pinned columns change
+                const pinnedChanged = cols !== lastPinnedRef
+                lastPinnedRef = cols
+
+                if (entries !== lastLogRef || pinnedChanged) {
+                    // Save expanded state before rebuild
+                    tbodyEl.querySelectorAll(".detail-row.visible").forEach(r => {
+                        const mainRow = r.previousElementSibling
+                        if (mainRow?.dataset?.id) expandedIds.add(mainRow.dataset.id)
+                    })
+
+                    tbodyEl.innerHTML = ""
+                    renderedIds.clear()
+                    lastLogRef = entries
+
+                    if (entries.length === 0) {
+                        const emptyTr = document.createElement("tr")
+                        const emptyTd = document.createElement("td")
+                        emptyTd.setAttribute("colspan", "99")
+                        emptyTd.style.cssText = "text-align:center; padding:3rem; color:#666;"
+                        emptyTd.innerHTML = '<strong style="color:#888;">No logs found</strong><br>Try a different query'
+                        emptyTr.appendChild(emptyTd)
+                        tbodyEl.appendChild(emptyTr)
+                        return
+                    }
+
+                    for (const entry of entries) {
+                        if (renderedIds.has(entry.id)) continue
+                        renderedIds.add(entry.id)
+                        const wasExpanded = expandedIds.has(entry.id)
+                        const [mainRow, detailRow] = LogRow(entry, false)
+                        if (wasExpanded) {
+                            // Restore expanded state: trigger the click to expand
+                            mainRow.click()
+                        }
+                        tbodyEl.appendChild(mainRow)
+                        tbodyEl.appendChild(detailRow)
+                    }
+                    // Clear saved state after restore
+                    expandedIds.clear()
+                } else {
+                    // Same array ref (shouldn't happen with immutable updates, but handle gracefully)
+                    for (const entry of entries) {
+                        if (renderedIds.has(entry.id)) continue
+                        renderedIds.add(entry.id)
+                        const [mainRow, detailRow] = LogRow(entry, true)
+                        tbodyEl.appendChild(mainRow)
+                        tbodyEl.appendChild(detailRow)
+                    }
+                }
+
+                // Auto-scroll
+                if (autoScroll.val && logContainerEl) {
+                    requestAnimationFrame(() => {
+                        logContainerEl.scrollTop = logContainerEl.scrollHeight
+                    })
+                }
+            })
+
+            return tbodyEl
+        }
+
+        // Full log table
+        function LogTable() {
+            const container = div({class: "log-container"},
+                div({class: "table-wrapper"},
+                    table({class: "log-table"},
+                        LogTableHeader(),
+                        LogTableBody(),
+                    ),
+                ),
+            )
+            logContainerEl = container
+            return container
+        }
+
+        // Status bar
+        function StatusBar() {
+            return div({class: () => statusText.val.startsWith("Error") ? "status error" : "status"},
+                () => statusText.val
+            )
+        }
+
+        // ──────────────────────────────────────────
+        // App — root component
+        // ──────────────────────────────────────────
+        function App() {
+            return [
+                SearchBar(),
+                mn(
+                    LogTable(),
+                    StatsBar(),
+                    StatusBar(),
+                ),
+            ]
+        }
+
+        // ──────────────────────────────────────────
+        // Mount & initialize
+        // ──────────────────────────────────────────
+        van.add(document.body, App())
+        connectWebSocket()
+        loadStats()
+        executeQuery()
     </script>
 </body>
 </html>
