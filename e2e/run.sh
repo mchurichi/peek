@@ -39,9 +39,9 @@ for spec in "${specs[@]}"; do
   echo "▶ Running: $(basename "$spec")"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   if node "$spec"; then
-    ((total_pass++))
+    ((++total_pass))
   else
-    ((total_fail++))
+    ((++total_fail))
   fi
   # Ensure port is freed between specs
   pkill -9 -f "peek.*--port 9997" 2>/dev/null || true
