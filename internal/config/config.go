@@ -14,7 +14,6 @@ type Config struct {
 	Storage StorageConfig `toml:"storage"`
 	Server  ServerConfig  `toml:"server"`
 	Parsing ParsingConfig `toml:"parsing"`
-	Logging LoggingConfig `toml:"logging"`
 }
 
 // StorageConfig holds storage-related configuration
@@ -36,11 +35,6 @@ type ParsingConfig struct {
 	AutoTimestamp bool   `toml:"auto_timestamp"`
 }
 
-// LoggingConfig holds logging configuration
-type LoggingConfig struct {
-	Level string `toml:"level"` // info, debug, error
-}
-
 // DefaultConfig returns the default configuration
 func DefaultConfig() *Config {
 	home, _ := os.UserHomeDir()
@@ -57,9 +51,6 @@ func DefaultConfig() *Config {
 		Parsing: ParsingConfig{
 			Format:        "auto",
 			AutoTimestamp: true,
-		},
-		Logging: LoggingConfig{
-			Level: "info",
 		},
 	}
 }

@@ -11,5 +11,3 @@ auto_open_browser = true
 format = "auto"             # auto, json, logfmt
 auto_timestamp = true       # Add timestamp if missing
 
-[logging]
-level = "info"              # info, debug, error
