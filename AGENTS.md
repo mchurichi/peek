@@ -1,0 +1,102 @@
+# Peek
+
+Minimalist CLI log collector and web UI. Single Go binary — reads structured logs from stdin, stores in BadgerDB, serves a real-time web dashboard.
+
+## Build & Run
+
+```bash
+# Build
+go build -o peek ./cmd/peek
+
+# Collect mode (pipe stdin + web UI)
+cat app.log | go run ./cmd/peek --port 8080
+
+# Server mode (browse stored logs)
+go run ./cmd/peek server
+
+# E2E tests (requires Playwright)
+npm run test:e2e
+
+# Single E2E spec
+node e2e/table.spec.mjs
+node e2e/resize.spec.mjs
+```
+
+No linter or formatter is configured yet. Use `go vet ./...` for basic checks.
+
+## Project Structure
+
+```
+cmd/peek/main.go          CLI entry point, flag parsing, collect/server routing
+internal/config/config.go  TOML config, defaults, size parsing
+pkg/parser/detector.go     Auto-detection of log formats (JSON, logfmt)
+pkg/parser/parser.go       JSON and logfmt parsers
+pkg/storage/types.go       LogEntry struct, Filter interface, Stats
+pkg/storage/badger.go      BadgerDB: Store, Query, Scan, retention
+pkg/query/lucene.go        Lucene query parser (AND/OR/NOT, field:value, wildcards, ranges)
+pkg/server/server.go       HTTP server, /query, WebSocket /logs, broadcast
+pkg/server/index.html      Production Web UI (embedded via //go:embed)
+internal/web/index.html    Dev reference copy of Web UI
+e2e/helpers.mjs            Shared Playwright helpers
+e2e/table.spec.mjs         Table rendering, expand/collapse, pinned columns
+e2e/resize.spec.mjs        Column resize behavior
+e2e/screenshot.mjs         Screenshot generator with realistic data
+```
+
+## Dependencies
+
+- Go 1.24+, BadgerDB v4, Gorilla WebSocket, BurntSushi/toml
+- Frontend: VanJS 1.5 from CDN (~1KB), no build step
+- E2E: Playwright (Node.js)
+
+## Architecture
+
+```
+stdin → Parser (JSON/logfmt/auto) → BadgerDB (~/.peek/db)
+                                         ↕
+                              HTTP Server (localhost:8080)
+                              ├─ GET  /health
+                              ├─ GET  /stats
+                              ├─ POST /query
+                              ├─ WS   /logs (real-time)
+                              └─ Web UI (embedded)
+```
+
+BadgerDB keys: `log:{timestamp_nano}:{id}` — enables time-range key seeking.
+Secondary index: `index:level:{LEVEL}:{timestamp_nano}:{id}`.
+
+## Code Conventions
+
+### Go
+- Standard layout: `cmd/`, `pkg/`, `internal/`
+- Wrap errors: `fmt.Errorf("context: %w", err)`
+- Storage methods hold `sync.RWMutex` for concurrent access
+- All query filters implement `Filter` interface: `Match(*LogEntry) bool`
+- Key prefixes: `log:`, `index:level:`, `meta:`
+
+### Web UI
+- VanJS reactive state via `van.state()` and `van.derive()`
+- Immutable state updates only — replace arrays/objects, never mutate
+- Grid-based table using CSS Grid with `display: contents` rows, not `<table>`
+- Column pinning: click field keys in expanded detail rows
+- Column resize: drag handles manipulate `gridTemplateColumns`
+
+### E2E Tests
+- Raw Playwright scripts, no test runner
+- Pattern: `startServer()` → launch Chromium → assertions → `printSummary()` → exit code
+- Custom `assert(label, condition, detail)` helper
+- Test port: `9997`
+- Screenshots: `/tmp/peek-test-*.png`
+
+## Critical Rules
+
+- **Two HTML files must stay in sync**: `pkg/server/index.html` and `internal/web/index.html`
+- **Scroll preservation**: expanding rows and adding columns must not reset scroll position — this is a critical UX invariant
+- **Zero JS dependencies**: no build tools, no npm packages in the UI. VanJS from CDN only.
+- **Single binary**: do not break the `//go:embed` distribution model
+- **No `<table>` elements**: the log table is CSS Grid
+- **No VanJS state mutation**: always replace (`logs.val = [...logs.val, entry]`)
+- **Filter interface**: new query features must implement `Match(*LogEntry) bool`
+- **BadgerDB key format**: maintain `log:{timestamp_nano}:{id}` — time-range optimizations depend on it
+- **New UI features need E2E tests** following the existing Playwright pattern
+- **Keep AGENTS.md up to date**: any change that alters build commands, project structure, dependencies, architecture, conventions, or critical rules documented here MUST include a corresponding update to this file in the same commit
