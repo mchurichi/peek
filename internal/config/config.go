@@ -32,7 +32,7 @@ type ServerConfig struct {
 
 // ParsingConfig holds parsing-related configuration
 type ParsingConfig struct {
-	Format        string `toml:"format"` // auto, json, slog
+	Format        string `toml:"format"` // auto, json, logfmt
 	AutoTimestamp bool   `toml:"auto_timestamp"`
 }
 

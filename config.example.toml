@@ -8,7 +8,7 @@ port = 8080
 auto_open_browser = true
 
 [parsing]
-format = "auto"             # auto, json, slog
+format = "auto"             # auto, json, logfmt
 auto_timestamp = true       # Add timestamp if missing
 
 [logging]

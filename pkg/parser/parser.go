@@ -89,33 +89,7 @@ func (p *JSONParser) Parse(line string) (*storage.LogEntry, error) {
 	return entry, nil
 }
 
-// SlogParser handles Go slog format (JSON-based)
-type SlogParser struct{}
-
-// NewSlogParser creates a new slog parser
-func NewSlogParser() *SlogParser {
-	return &SlogParser{}
-}
-
-// CanParse checks if the line is valid JSON with slog fields
-func (p *SlogParser) CanParse(line string) bool {
-	var obj map[string]interface{}
-	if err := json.Unmarshal([]byte(line), &obj); err != nil {
-		return false
-	}
-	// Slog typically has "time" and "msg" fields
-	_, hasTime := obj["time"]
-	_, hasMsg := obj["msg"]
-	return hasTime && hasMsg
-}
-
-// Parse parses a slog JSON format line
-func (p *SlogParser) Parse(line string) (*storage.LogEntry, error) {
-	// Slog uses the same structure as JSON, just with specific field names
-	return NewJSONParser().Parse(line)
-}
-
-// LogfmtParser handles key=value log format (Go slog text, logfmt)
+// LogfmtParser handles key=value log format (logfmt)
 type LogfmtParser struct{}
 
 // NewLogfmtParser creates a new logfmt parser

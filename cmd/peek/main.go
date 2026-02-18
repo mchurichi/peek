@@ -24,7 +24,7 @@ func main() {
 	dbPath := flag.String("db-path", "", "Database path (overrides config)")
 	retentionSize := flag.String("retention-size", "", "Max storage size (e.g., 1GB, 500MB)")
 	retentionDays := flag.Int("retention-days", 0, "Max age of logs in days")
-	format := flag.String("format", "auto", "Log format: auto, json, slog")
+	format := flag.String("format", "auto", "Log format: auto, json, logfmt")
 	port := flag.Int("port", 0, "HTTP server port (for server mode)")
 	noBrowser := flag.Bool("no-browser", false, "Don't auto-open browser")
 	help := flag.Bool("help", false, "Show help")
@@ -106,7 +106,7 @@ OPTIONS:
     --db-path PATH         Database path (default: ~/.peek/db)
     --retention-size SIZE  Max storage (e.g., 1GB, 500MB)
     --retention-days DAYS  Max age of logs (e.g., 7, 30)
-    --format FORMAT        auto | json | slog (default: auto)
+    --format FORMAT        auto | json | logfmt (default: auto)
     --port PORT            HTTP port for web UI (default: 8080, works in both modes)
     --no-browser           Don't auto-open browser
     --help                 Show this help
