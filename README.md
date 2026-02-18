@@ -2,6 +2,8 @@
 
 A minimalist, dev-first CLI log collector and web UI. Pipe logs into `peek`, store them locally, and query them through a real-time web dashboard.
 
+![Peek — Lucene query filtering errors and warnings across microservices](docs/screenshot.png)
+
 **Status:** Phase 1 MVP Complete
 
 ## Features
