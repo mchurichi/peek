@@ -22,7 +22,7 @@
             border-bottom: 2px solid #3d3d3d;
         }
 
-        h1 { font-size: 1.5rem; color: #4CAF50; margin-bottom: 1rem; }
+        h1 { font-size: 1.75rem; color: #4CAF50; margin-bottom: 1rem; }
 
         .search-bar { display: flex; gap: 0.5rem; }
 
@@ -34,7 +34,7 @@
             color: #e0e0e0;
             border-radius: 4px;
             font-family: ui-monospace, 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Courier New', monospace;
-            font-size: 1rem;
+            font-size: 1.1rem;
         }
 
         .search-bar input:focus { outline: none; border-color: #4CAF50; }
@@ -46,7 +46,7 @@
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 1rem;
+            font-size: 1.1rem;
             transition: background 0.2s;
         }
 
@@ -60,7 +60,7 @@
             border: 1px solid #4d4d4d;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 1.2rem;
+            font-size: 1.35rem;
             line-height: 1;
             transition: color 0.2s;
         }
@@ -79,7 +79,7 @@
             display: flex;
             gap: 0.75rem;
             margin-top: 0.4rem;
-            font-size: 0.7rem;
+            font-size: 0.8rem;
             color: #666;
         }
 
@@ -94,63 +94,66 @@
             background: #2d2d2d;
             border-radius: 4px;
             border: 1px solid #3d3d3d;
+            overflow-anchor: none;  /* Prevent scroll anchoring which resets position */
         }
 
         .table-wrapper {
-            display: inline-block;
-            min-width: 100%;
+            min-width: max-content;
         }
 
         .log-table {
-            width: fit-content;
-            border-collapse: separate;
-            border-spacing: 0;
-            table-layout: fixed;
+            display: grid;
+            /* grid-template-columns set dynamically in JS */
+            width: max-content;
+            min-width: 100%;
             font-family: ui-monospace, 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Courier New', monospace;
-            font-size: 0.82rem;
+            font-size: 0.95rem;
             line-height: 1.5;
+            grid-auto-rows: auto;
         }
 
-        .log-table thead {
+        .log-table-header {
+            display: grid;
+            grid-column: 1 / -1;
+            grid-template-columns: inherit;
             position: sticky;
             top: 0;
-            z-index: 10;
-            box-shadow: 0 2px 0 #555;
+            z-index: 100;
         }
 
-        .log-table thead th {
+        .log-table-body {
+            display: contents;
+        }
+
+        .log-table-header > div {
             background: #333;
             color: #888;
             font-weight: normal;
-            font-size: 0.75rem;
+            font-size: 0.85rem;
             text-align: left;
             padding: 0.3rem 0.5rem;
             white-space: nowrap;
             overflow: visible;
+            border-bottom: 2px solid #555;
         }
 
-        .log-table thead th.col-chevron { width: 1.5ch; min-width: 16px; }
-        .log-table thead th.col-time { width: 17ch; min-width:122px; }
-        .log-table thead th.col-level { width: 6ch; min-width: 43px; }
-        .log-table thead th.col-msg { /* flex fill - no width */ }
-        .log-table thead th.col-pinned {
-            width: 16ch;
+        .log-table-header .col-pinned {
             user-select: none;
             cursor: grab;
         }
 
-        .log-table thead th.col-pinned.dragging {
+        .log-table-header .col-pinned.dragging {
             opacity: 0.4;
         }
 
-        .log-table thead th.col-pinned.drag-over {
+        .log-table-header .col-pinned.drag-over {
             border-left: 2px solid #4CAF50;
         }
 
         .col-remove-hdr {
             color: #555;
             margin-left: 0.5ch;
-            font-size: 0.65rem;
+            font-size: 0.75rem;
             cursor: pointer;
             padding: 0 0.3ch;
             border-radius: 2px;
@@ -169,38 +172,45 @@
             bottom: 0;
             width: 7px;
             cursor: col-resize;
-            background: transparent;
+            background: rgba(76, 175, 80, 0.15);
             z-index: 2;
+            transition: background 0.2s;
         }
 
         .resize-handle:hover,
         .resize-handle.active { background: #4CAF50; }
 
-        .log-table .log-row td {
+        .log-row {
+            display: contents;
+        }
+
+        .log-row > div {
             padding: 0.25rem 0.5rem;
             border-bottom: 1px solid #2a2a2a;
             vertical-align: top;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            cursor: pointer;
+            transition: background 0.1s;
         }
 
-        .log-table .log-row { cursor: pointer; transition: background 0.1s; }
-        .log-table .log-row:hover td { background: #2a2a2a; }
+        .log-row:hover > div { background: #2a2a2a; }
 
-        .log-table .detail-row > td {
+        .detail-row {
+            grid-column: 1 / -1;
             padding: 0.35rem 0.5rem 0.5rem 2.5ch;
             background: #1a1a1a;
             border-bottom: 1px solid #2a2a2a;
-            font-size: 0.8rem;
+            font-size: 0.9rem;
             color: #999;
             white-space: pre-wrap;
             word-break: break-all;
+            display: none;
         }
 
-        .log-table .detail-row { display: none; }
-        .log-table .detail-row.visible { display: table-row; }
-        .log-table .pinned-val { color: #777; }
+        .detail-row.visible { display: block; }
+        .pinned-val { color: #777; }
 
         .log-chevron {
             display: inline-block;
@@ -230,7 +240,7 @@
             width: auto;
             table-layout: auto;
             font-family: ui-monospace, 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Courier New', monospace;
-            font-size: 0.8rem;
+            font-size: 0.9rem;
         }
 
         .fields-table td {
@@ -264,7 +274,7 @@
             padding: 0.5rem;
             text-align: center;
             color: #888;
-            font-size: 0.9rem;
+            font-size: 1rem;
         }
 
         .status.connected { color: #4CAF50; }
@@ -275,7 +285,7 @@
             padding: 0.5rem;
             background: #2d2d2d;
             border-radius: 4px;
-            font-size: 0.85rem;
+            font-size: 0.95rem;
             color: #888;
         }
 
@@ -310,6 +320,7 @@
         let ws = null
         let queryInputEl = null
         let logContainerEl = null
+        let logTableEl = null
 
         // ──────────────────────────────────────────
         // Helpers
@@ -327,7 +338,7 @@
             const q = queryInputEl?.value?.trim() || ""
             query.val = q
             searching.val = true
-            statusText.val = "Searching..."
+            statusText.val = ""
 
             try {
                 const res = await fetch("/query", {
@@ -338,7 +349,7 @@
                 const data = await res.json()
                 logs.val = data.logs || []
                 totalCount.val = data.total
-                statusText.val = `Found ${data.total} logs in ${data.took_ms}ms`
+                statusText.val = ""
 
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({action: "subscribe", query: q || "*"}))
@@ -385,6 +396,60 @@
             } catch (e) { console.error("Stats error:", e) }
         }
 
+        let globalScrollPreserve = 0  // Global to store scroll before any user interaction
+        
+        // Make scrollPreserveValue accessible from window for testing
+        if (typeof window !== 'undefined') {
+            window.scrollPreserveValue = 0
+        }
+        
+        // Initialize scroll preservation mechanism
+        function initScrollPreservation() {
+            if (!logContainerEl) return
+            
+            // Watch for detail row expansions via class changes
+            const detailRowObserver = new MutationObserver((mutations) => {
+                for (const mutation of mutations) {
+                    if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                        const target = mutation.target
+                        if (target.classList.contains('detail-row') && window.scrollPreserveValue > 0) {
+                            const isVisible = target.classList.contains('visible')
+                            if (isVisible && !mutation.oldValue?.includes('visible')) {
+                                if (logContainerEl) {
+                                    logContainerEl.scrollTop = window.scrollPreserveValue
+                                    requestAnimationFrame(() => {
+                                        logContainerEl.scrollTop = window.scrollPreserveValue
+                                        requestAnimationFrame(() => {
+                                            logContainerEl.scrollTop = window.scrollPreserveValue
+                                        })
+                                    })
+                                }
+                            }
+                        }
+                    }
+                }
+            })
+            
+            detailRowObserver.observe(logContainerEl, {
+                attributes: true,
+                attributeOldValue: true,
+                subtree: true,
+                attributeFilter: ['class']
+            })
+        }
+        
+        // Listen for any click on log rows to preserve scroll
+        if (typeof window !== 'undefined') {
+            window.addEventListener('mousedown', (e) => {
+                if (e.target.closest('.log-row, .col-chevron, .field-key')) {
+                    if (logContainerEl) {
+                        globalScrollPreserve = logContainerEl.scrollTop
+                        window.scrollPreserveValue = logContainerEl.scrollTop
+                    }
+                }
+            }, { capture: true })
+        }
+
         // ──────────────────────────────────────────
         // Actions
         // ──────────────────────────────────────────
@@ -405,38 +470,48 @@
         // Components
         // ──────────────────────────────────────────
 
-        // Resize handle — attaches drag behavior to a th element
+        // Resize handle — attaches drag behavior to a header cell
         const columnWidths = new Map()  // persist widths across rebuilds
-        function addResizeHandle(thEl, colKey) {
-            thEl.style.position = "relative"
-            if (colKey && columnWidths.has(colKey)) {
-                thEl.style.width = columnWidths.get(colKey)
-            }
+        function addResizeHandle(headerCell, colKey, tableEl) {
+            headerCell.style.position = "relative"
             const handle = document.createElement("div")
             handle.className = "resize-handle"
             handle.addEventListener("mousedown", e => {
                 e.preventDefault()
                 e.stopPropagation()
                 
-                const tableEl = thEl.closest("table")
-                const startX = e.pageX
-                const startW = thEl.offsetWidth
+                const headerEl = headerCell.closest(".log-table-header")
+                if (!tableEl || !headerEl) return
                 
-                // Set table to very large width to prevent redistribution
-                if (tableEl) {
-                    console.log("Before resize - table.style.width:", tableEl.style.width, "offsetWidth:", tableEl.offsetWidth)
-                    tableEl.style.setProperty('width', '99999px', 'important')
-                    console.log("After setting 99999px - table.style.width:", tableEl.style.width, "offsetWidth:", tableEl.offsetWidth)
-                }
+                // Find column index
+                const allHeaders = Array.from(headerEl.children)
+                const colIndex = allHeaders.indexOf(headerCell)
+                if (colIndex === -1) return
+                
+                const startX = e.pageX
+                const startW = headerCell.offsetWidth
+                
+                // Get current grid-template-columns by reading all header widths
+                const gridCols = allHeaders.map(h => h.offsetWidth + "px")
                 
                 handle.classList.add("active")
                 document.body.style.cursor = "col-resize"
-                document.body.style.userSelect = "none"
+                document.body.style.userselect = "none"
                 
                 const onMove = e2 => {
                     const delta = e2.pageX - startX
                     const newW = Math.max(40, startW + delta)
-                    thEl.style.width = newW + "px"
+                    
+                    // Update the specific column in grid
+                    gridCols[colIndex] = newW + "px"
+                    const newGridTemplate = gridCols.join(" ")
+                    
+                    // Update both table and header grid templates
+                    tableEl.style.gridTemplateColumns = newGridTemplate
+                    const headerEl = tableEl.querySelector('.log-table-header')
+                    if (headerEl) {
+                        headerEl.style.gridTemplateColumns = newGridTemplate
+                    }
                 }
                 
                 const onUp = () => {
@@ -446,27 +521,17 @@
                     document.removeEventListener("mousemove", onMove)
                     document.removeEventListener("mouseup", onUp)
                     
-                    // Reset table to fit-content
-                    if (tableEl) {
-                        tableEl.style.removeProperty('width')
-                    }
-                    
                     // Save column width
-                    if (colKey) {
-                        columnWidths.set(colKey, thEl.style.width)
+                    const finalWidth = gridCols[colIndex]
+                    if (colKey && finalWidth) {
+                        columnWidths.set(colKey, finalWidth)
                     }
                 }
                 
                 document.addEventListener("mousemove", onMove)
                 document.addEventListener("mouseup", onUp)
             })
-            thEl.appendChild(handle)
-        }
-                
-                document.addEventListener("mousemove", onMove)
-                document.addEventListener("mouseup", onUp)
-            })
-            thEl.appendChild(handle)
+            headerCell.appendChild(handle)
         }
 
         // Search bar
@@ -550,57 +615,99 @@
             const expanded = van.state(false)
             const level = entry.level ? entry.level.toUpperCase() : ""
 
-            // Pinned value cells
-            const pinnedCells = pinned.val.map(col => {
-                const val = entry.fields?.[col] != null ? String(entry.fields[col]) : "-"
-                return td({class: "pinned-val", title: col}, val)
+            // Watch for expansion changes and restore scroll
+            van.derive(() => {
+                const isExpanded = expanded.val
+                if (isExpanded && window.scrollPreserveValue > 0) {
+                    requestAnimationFrame(() => {
+                        if (logContainerEl) {
+                            logContainerEl.scrollTop = window.scrollPreserveValue
+                            requestAnimationFrame(() => {
+                                logContainerEl.scrollTop = window.scrollPreserveValue
+                            })
+                        }
+                    })
+                }
             })
 
-            const mainRow = tr(
-                {class: `log-row${isNew ? " new" : ""}`, "data-id": entry.id,
-                 onclick: () => { expanded.val = !expanded.val }},
-                td({class: "log-chevron"}, () => expanded.val ? "\u25BE" : "\u25B8"),
-                td({class: "log-timestamp"}, fmtTime(entry.timestamp)),
-                td({class: `log-level${entry.level ? ` level-${entry.level}` : ""}`}, level),
-                td({class: "log-message"}, entry.message),
-                ...pinnedCells,
+            // Main row wrapper (display: contents, children become grid items)
+            const mainRow = div({class: `log-row${isNew ? " new" : ""}`, "data-id": entry.id})
+            
+            // Chevron cell
+            const chevron = div({class: "col-chevron", onclick: (e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                
+                const container = logContainerEl
+                const currentScroll = container?.scrollTop || 0
+                const savedScroll = globalScrollPreserve || currentScroll
+                
+                // Update scroll preserve value before toggle
+                if (savedScroll > 0) {
+                    window.scrollPreserveValue = savedScroll
+                }
+                
+                // Toggle expansion (this will trigger the derive above)
+                expanded.val = !expanded.val
+            }},
+                () => expanded.val ? "\u25BE" : "\u25B8"
             )
+            van.add(mainRow, chevron)
+            
+            // Fixed columns
+            van.add(mainRow, div({class: "col-time"}, fmtTime(entry.timestamp)))
+            van.add(mainRow, div({class: `col-level level-${level}`}, level))
+            van.add(mainRow, div({class: "col-msg"}, entry.message))
 
-            const detailRow = tr(
+            // Pinned columns
+            for (const col of pinned.val) {
+                const val = entry.fields?.[col] != null ? String(entry.fields[col]) : ""
+                van.add(mainRow, div({class: "pinned-val", title: col}, val))
+            }
+
+            // Detail row (spans all columns)
+            const detailRow = div(
                 {class: () => `detail-row${expanded.val ? " visible" : ""}`},
-                td({colspan: 4 + pinned.val.length}, FieldsTable(entry)),
+                FieldsTable(entry)
             )
 
             return [mainRow, detailRow]
         }
 
         // Table header with reactive pinned columns
-        function LogTableHeader() {
-            const theadEl = document.createElement("thead")
+        function LogTableHeader(tableEl) {
+            const headerEl = document.createElement("div")
+            headerEl.className = "log-table-header"
 
             function rebuild() {
-                theadEl.innerHTML = ""
-                const row = document.createElement("tr")
+                headerEl.innerHTML = ""
+                
+                // Calculate grid-template-columns
+                const gridCols = []
 
                 // Fixed columns
                 const cols = [
-                    {cls: "col-chevron", text: ""},
-                    {cls: "col-time", text: "time"},
-                    {cls: "col-level", text: "level"},
-                    {cls: "col-msg", text: "message"},
+                    {cls: "col-chevron", text: "", width: columnWidths.get("col-chevron") || "16px"},
+                    {cls: "col-time", text: "time", width: columnWidths.get("col-time") || "195px"},
+                    {cls: "col-level", text: "level", width: columnWidths.get("col-level") || "55px"},
+                    {cls: "col-msg", text: "message", width: columnWidths.get("col-msg") || "1fr"},
                 ]
                 for (const c of cols) {
-                    const el = document.createElement("th")
+                    gridCols.push(c.width)
+                    const el = document.createElement("div")
                     el.className = c.cls
                     el.textContent = c.text
-                    if (c.cls !== "col-chevron") addResizeHandle(el, c.cls)
-                    row.appendChild(el)
+                    if (c.cls !== "col-chevron") addResizeHandle(el, c.cls, tableEl)
+                    headerEl.appendChild(el)
                 }
 
                 // Pinned columns (draggable + remove on X only)
                 let dragSrcCol = null
                 for (const col of pinned.val) {
-                    const el = document.createElement("th")
+                    const width = columnWidths.get(`pinned-${col}`) || "200px"
+                    gridCols.push(width)
+                    
+                    const el = document.createElement("div")
                     el.className = "col-pinned"
                     el.draggable = true
                     el.dataset.col = col
@@ -628,7 +735,7 @@
                     })
                     el.addEventListener("dragend", () => {
                         el.classList.remove("dragging")
-                        row.querySelectorAll(".col-pinned").forEach(th => th.classList.remove("drag-over"))
+                        headerEl.querySelectorAll(".col-pinned").forEach(th => th.classList.remove("drag-over"))
                     })
                     el.addEventListener("dragover", e => {
                         e.preventDefault()
@@ -652,25 +759,33 @@
                         dragSrcCol = null
                     })
 
-                    addResizeHandle(el, `pinned-${col}`)
-                    row.appendChild(el)
+                    addResizeHandle(el, `pinned-${col}`, tableEl)
+                    headerEl.appendChild(el)
                 }
 
-                theadEl.appendChild(row)
+                // Set grid-template-columns on parent .log-table AND on header
+                if (tableEl) {
+                    const gridTemplate = gridCols.join(" ")
+                    tableEl.style.gridTemplateColumns = gridTemplate
+                    headerEl.style.gridTemplateColumns = gridTemplate
+                }
             }
 
             van.derive(() => { pinned.val; rebuild() })
             rebuild()
-            return theadEl
+            return headerEl
         }
 
         // Table body — incremental append, full rebuild on query/column change
         function LogTableBody() {
-            const tbodyEl = document.createElement("tbody")
+            const bodyEl = document.createElement("div")
+            bodyEl.className = "log-table-body"
             const renderedIds = new Set()
             let lastLogRef = null  // track array identity for full resets
             let lastPinnedRef = null  // track pinned columns for full resets
             const expandedIds = new Set()  // track expanded rows across rebuilds
+            let lastLogCount = 0  // track log count to detect new logs
+            let preserveScroll = 0  // preserve scroll position across rebuilds
 
             van.derive(() => {
                 const entries = logs.val
@@ -678,27 +793,33 @@
 
                 // Force full rebuild when logs change or pinned columns change
                 const pinnedChanged = cols !== lastPinnedRef
+                const logsChanged = entries !== lastLogRef
+                const newLogsAdded = entries.length > lastLogCount
+                
+                // Always save current scroll position BEFORE any changes
+                if (logContainerEl && pinnedChanged && !newLogsAdded) {
+                    preserveScroll = logContainerEl.scrollTop
+                }
+                
                 lastPinnedRef = cols
+                lastLogCount = entries.length
 
-                if (entries !== lastLogRef || pinnedChanged) {
+                if (logsChanged || pinnedChanged) {
                     // Save expanded state before rebuild
-                    tbodyEl.querySelectorAll(".detail-row.visible").forEach(r => {
+                    bodyEl.querySelectorAll(".detail-row.visible").forEach(r => {
                         const mainRow = r.previousElementSibling
                         if (mainRow?.dataset?.id) expandedIds.add(mainRow.dataset.id)
                     })
 
-                    tbodyEl.innerHTML = ""
+                    bodyEl.innerHTML = ""
                     renderedIds.clear()
                     lastLogRef = entries
 
                     if (entries.length === 0) {
-                        const emptyTr = document.createElement("tr")
-                        const emptyTd = document.createElement("td")
-                        emptyTd.setAttribute("colspan", "99")
-                        emptyTd.style.cssText = "text-align:center; padding:3rem; color:#666;"
-                        emptyTd.innerHTML = '<strong style="color:#888;">No logs found</strong><br>Try a different query'
-                        emptyTr.appendChild(emptyTd)
-                        tbodyEl.appendChild(emptyTr)
+                        const emptyDiv = document.createElement("div")
+                        emptyDiv.style.cssText = "grid-column: 1 / -1; text-align:center; padding:3rem; color:#666;"
+                        emptyDiv.innerHTML = '<strong style="color:#888;">No logs found</strong><br>Try a different query'
+                        bodyEl.appendChild(emptyDiv)
                         return
                     }
 
@@ -708,47 +829,69 @@
                         const wasExpanded = expandedIds.has(entry.id)
                         const [mainRow, detailRow] = LogRow(entry, false)
                         if (wasExpanded) {
-                            // Restore expanded state: trigger the click to expand
-                            mainRow.click()
+                            // Restore expanded state: trigger the chevron click
+                            mainRow.querySelector('.col-chevron')?.click()
                         }
-                        tbodyEl.appendChild(mainRow)
-                        tbodyEl.appendChild(detailRow)
+                        bodyEl.appendChild(mainRow)
+                        bodyEl.appendChild(detailRow)
                     }
                     // Clear saved state after restore
                     expandedIds.clear()
+
+                    // Restore scroll position if only columns changed (not new logs)
+                    if (pinnedChanged && !newLogsAdded && preserveScroll > 0 && logContainerEl) {
+                        setTimeout(() => {
+                            if (logContainerEl) {
+                                logContainerEl.scrollTop = preserveScroll
+                                preserveScroll = 0
+                            }
+                        }, 0)
+                    }
+                    // Only auto-scroll if new logs were added and auto-scroll is enabled
+                    else if (autoScroll.val && newLogsAdded && logContainerEl) {
+                        preserveScroll = 0  // Reset when auto-scrolling
+                        requestAnimationFrame(() => {
+                            logContainerEl.scrollTop = logContainerEl.scrollHeight
+                        })
+                    }
                 } else {
                     // Same array ref (shouldn't happen with immutable updates, but handle gracefully)
                     for (const entry of entries) {
                         if (renderedIds.has(entry.id)) continue
                         renderedIds.add(entry.id)
                         const [mainRow, detailRow] = LogRow(entry, true)
-                        tbodyEl.appendChild(mainRow)
-                        tbodyEl.appendChild(detailRow)
+                        bodyEl.appendChild(mainRow)
+                        bodyEl.appendChild(detailRow)
                     }
-                }
 
-                // Auto-scroll
-                if (autoScroll.val && logContainerEl) {
-                    requestAnimationFrame(() => {
-                        logContainerEl.scrollTop = logContainerEl.scrollHeight
-                    })
+                    // Auto-scroll for incremental additions
+                    if (autoScroll.val && logContainerEl) {
+                        requestAnimationFrame(() => {
+                            logContainerEl.scrollTop = logContainerEl.scrollHeight
+                        })
+                    }
                 }
             })
 
-            return tbodyEl
+            return bodyEl
         }
 
         // Full log table
         function LogTable() {
+            const tableDiv = div({class: "log-table"})
+            logTableEl = tableDiv  // Set global reference BEFORE creating children
+            
+            van.add(tableDiv, LogTableHeader(tableDiv))  // Pass tableDiv to header
+            van.add(tableDiv, LogTableBody())
+            
             const container = div({class: "log-container"},
-                div({class: "table-wrapper"},
-                    table({class: "log-table"},
-                        LogTableHeader(),
-                        LogTableBody(),
-                    ),
-                ),
+                div({class: "table-wrapper"}, tableDiv),
             )
             logContainerEl = container
+            
+            // Initialize scroll preservation observer
+            setTimeout(() => initScrollPreservation(), 0)
+            
             return container
         }
 
