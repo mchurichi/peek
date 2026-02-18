@@ -33,7 +33,8 @@ try {
   server = await startServer(PORT);
   console.log('✅ Server ready');
 
-  browser = await chromium.launch({ headless: false, slowMo: 80 });
+  const headless = !!(process.env.CI || process.env.HEADLESS);
+  browser = await chromium.launch({ headless, ...(headless ? {} : { slowMo: 80 }) });
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
   const page = await ctx.newPage();
   page.on('pageerror', err => console.error('  PAGE ERROR:', err.message));

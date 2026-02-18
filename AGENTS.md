@@ -40,6 +40,7 @@ e2e/helpers.mjs            Shared Playwright helpers
 e2e/table.spec.mjs         Table rendering, expand/collapse, pinned columns
 e2e/resize.spec.mjs        Column resize behavior
 e2e/screenshot.mjs         Screenshot generator with realistic data
+.github/workflows/ci.yml   CI pipeline (build, vet, unit tests, E2E tests)
 ```
 
 ## Dependencies

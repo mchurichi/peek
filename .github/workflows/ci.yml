@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Build
+        run: go build -o peek ./cmd/peek
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Unit Tests
+        run: go test ./... -race -count=1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install E2E dependencies
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: E2E Tests
+        run: ./e2e/run.sh
