@@ -165,9 +165,6 @@ auto_open_browser = true
 [parsing]
 format = "auto"
 auto_timestamp = true
-
-[logging]
-level = "info"
 ```
 
 CLI flags override config file values.
