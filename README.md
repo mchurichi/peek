@@ -2,9 +2,15 @@
 
 A minimalist, dev-first CLI log collector and web UI. Pipe logs into `peek`, store them locally, and query them through a real-time web dashboard.
 
-![Peek — Lucene query filtering errors and warnings across microservices](docs/screenshot.png)
+```bash
+$ kubectl logs -l app=frontdesk -w | peek
 
-**Status:** Phase 1 MVP Complete
+2026/02/18 02:30:20 Starting collect mode...
+2026/02/18 02:30:20 Web UI available at http://localhost:8081
+2026/02/18 02:30:20 Starting server on http://localhost:8081
+```
+
+![Peek — Lucene query filtering errors and warnings across microservices](docs/screenshot.png)
 
 ## Features
 
