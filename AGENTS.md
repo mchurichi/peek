@@ -35,8 +35,7 @@ pkg/storage/types.go       LogEntry struct, Filter interface, Stats
 pkg/storage/badger.go      BadgerDB: Store, Query, Scan, retention
 pkg/query/lucene.go        Lucene query parser (AND/OR/NOT, field:value, wildcards, ranges)
 pkg/server/server.go       HTTP server, /query, WebSocket /logs, broadcast
-pkg/server/index.html      Production Web UI (embedded via //go:embed)
-internal/web/index.html    Dev reference copy of Web UI
+pkg/server/index.html      Web UI (embedded via //go:embed)
 e2e/helpers.mjs            Shared Playwright helpers
 e2e/table.spec.mjs         Table rendering, expand/collapse, pinned columns
 e2e/resize.spec.mjs        Column resize behavior
@@ -45,8 +44,8 @@ e2e/screenshot.mjs         Screenshot generator with realistic data
 
 ## Dependencies
 
-- Go 1.24+, BadgerDB v4, Gorilla WebSocket, BurntSushi/toml
-- Frontend: VanJS 1.5 from CDN (~1KB), no build step
+- Go, BadgerDB, Gorilla WebSocket, BurntSushi/toml
+- Frontend: VanJS from CDN (~1KB), no build step
 - E2E: Playwright (Node.js)
 
 ## Architecture
@@ -90,7 +89,7 @@ Secondary index: `index:level:{LEVEL}:{timestamp_nano}:{id}`.
 
 ## Critical Rules
 
-- **Two HTML files must stay in sync**: `pkg/server/index.html` and `internal/web/index.html`
+- **Single UI file**: `pkg/server/index.html` is the only HTML source — embedded via `//go:embed`
 - **Scroll preservation**: expanding rows and adding columns must not reset scroll position — this is a critical UX invariant
 - **Zero JS dependencies**: no build tools, no npm packages in the UI. VanJS from CDN only.
 - **Single binary**: do not break the `//go:embed` distribution model
