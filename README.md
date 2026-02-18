@@ -336,7 +336,7 @@ Contributions welcome! Please open an issue first to discuss changes.
 
 ## License
 
-MIT License - See LICENSE file for details
+Apache-2.0 - see [LICENSE](LICENSE) for details
 
 ## Credits
 
