@@ -1,5 +1,7 @@
 # Peek
 
+[![CI](https://github.com/mchurichi/peek/actions/workflows/ci.yml/badge.svg)](https://github.com/mchurichi/peek/actions/workflows/ci.yml)
+
 A minimalist, dev-first CLI log collector and web UI. Pipe logs into `peek`, store them locally, and query them through a real-time web dashboard.
 
 ```bash
