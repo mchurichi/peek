@@ -48,11 +48,15 @@ const POLL_INTERVAL_MS = 1_000;
  * Returns the child process handle.
  */
 export async function startServer(port = DEFAULT_PORT, { rows = 40 } = {}) {
-  const proc = spawn('sh', ['-c', `
+  const testDbPath = `/tmp/peek-e2e-test-${port}`;
+  const cmd = `
+    rm -rf ${testDbPath} && \
+    go build -o /tmp/peek-e2e-bin ./cmd/peek && \
     for i in $(seq 1 ${rows}); do
-      echo "{\\"level\\":\\"INFO\\",\\"msg\\":\\"Message $i\\",\\"time\\":\\"2026-02-18T10:$(printf '%02d' $i):00Z\\",\\"service\\":\\"api\\",\\"user_id\\":\\"user$i\\",\\"request_id\\":\\"req-$i\\"}"
-    done | go run ./cmd/peek --port ${port} --no-browser --all
-  `], { cwd: PROJECT_ROOT, stdio: ['pipe', 'pipe', 'pipe'] });
+      printf '{"level":"INFO","msg":"Message %d","time":"2026-02-18T10:%02d:00Z","service":"api","user_id":"user%d","request_id":"req-%d"}\\n' "$i" "$i" "$i" "$i"
+    done | /tmp/peek-e2e-bin --port ${port} --no-browser --db-path ${testDbPath} --all --retention-days 0 --retention-size 10GB > /tmp/peek-e2e-${port}.log 2>&1
+  `;
+  const proc = spawn('sh', ['-c', cmd], { cwd: PROJECT_ROOT });
 
   // Poll until the HTTP server is ready
   const deadline = Date.now() + STARTUP_TIMEOUT_MS;

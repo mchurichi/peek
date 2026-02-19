@@ -268,10 +268,12 @@ func (s *BadgerStorage) enforceRetention() error {
 // deleteOldestEntries deletes approximately targetBytes worth of oldest entries
 func (s *BadgerStorage) deleteOldestEntries(targetBytes int) error {
 	var keysToDelete [][]byte
+	var indexKeysToDelete [][]byte
 	deletedSize := 0
 
 	err := s.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = true
 		it := txn.NewIterator(opts)
 		defer it.Close()
 
@@ -280,6 +282,20 @@ func (s *BadgerStorage) deleteOldestEntries(targetBytes int) error {
 			item := it.Item()
 			keysToDelete = append(keysToDelete, item.KeyCopy(nil))
 			deletedSize += int(item.EstimatedSize())
+
+			// Also collect the corresponding level index key
+			err := item.Value(func(val []byte) error {
+				entry, err := FromJSON(val)
+				if err != nil {
+					return nil // Skip invalid entries
+				}
+				levelKey := fmt.Sprintf("%s%s:%d:%s", levelIndexPrefix, entry.Level, entry.Timestamp.UnixNano(), entry.ID)
+				indexKeysToDelete = append(indexKeysToDelete, []byte(levelKey))
+				return nil
+			})
+			if err != nil {
+				return err
+			}
 
 			if deletedSize >= targetBytes {
 				break
@@ -300,6 +316,11 @@ func (s *BadgerStorage) deleteOldestEntries(targetBytes int) error {
 				return err
 			}
 		}
+		for _, key := range indexKeysToDelete {
+			if err := txn.Delete(key); err != nil {
+				return err
+			}
+		}
 		return nil
 	})
 }
@@ -308,10 +329,11 @@ func (s *BadgerStorage) deleteOldestEntries(targetBytes int) error {
 func (s *BadgerStorage) deleteEntriesOlderThan(cutoff time.Time) error {
 	cutoffNano := cutoff.UnixNano()
 	var keysToDelete [][]byte
+	var indexKeysToDelete [][]byte
 
 	err := s.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
-		opts.PrefetchValues = false
+		opts.PrefetchValues = true
 		it := txn.NewIterator(opts)
 		defer it.Close()
 
@@ -325,6 +347,20 @@ func (s *BadgerStorage) deleteEntriesOlderThan(cutoff time.Time) error {
 				fmt.Sscanf(parts[0], "%d", &ts)
 				if ts < cutoffNano {
 					keysToDelete = append(keysToDelete, it.Item().KeyCopy(nil))
+
+					// Also collect the corresponding level index key
+					err := it.Item().Value(func(val []byte) error {
+						entry, err := FromJSON(val)
+						if err != nil {
+							return nil // Skip invalid entries
+						}
+						levelKey := fmt.Sprintf("%s%s:%d:%s", levelIndexPrefix, entry.Level, entry.Timestamp.UnixNano(), entry.ID)
+						indexKeysToDelete = append(indexKeysToDelete, []byte(levelKey))
+						return nil
+					})
+					if err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -339,6 +375,11 @@ func (s *BadgerStorage) deleteEntriesOlderThan(cutoff time.Time) error {
 	// Delete keys in batches
 	return s.db.Update(func(txn *badger.Txn) error {
 		for _, key := range keysToDelete {
+			if err := txn.Delete(key); err != nil {
+				return err
+			}
+		}
+		for _, key := range indexKeysToDelete {
 			if err := txn.Delete(key); err != nil {
 				return err
 			}

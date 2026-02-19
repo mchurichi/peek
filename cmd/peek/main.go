@@ -394,9 +394,18 @@ func runCollectMode(cfg *config.Config, showAll bool) error {
 	// Record start time for fresh mode
 	var startTime *time.Time
 	if !showAll {
-		now := time.Now()
-		startTime = &now
-		log.Println("Fresh mode: only showing logs from current session")
+		// For fresh mode, use the newest entry's timestamp as the baseline
+		// Only show logs newer than what's already in the database
+		_, newest, err := db.GetOldestNewest()
+		if err == nil && !newest.IsZero() {
+			// Use newest timestamp as baseline (logs must be newer than this)
+			baseline := newest.Add(1 * time.Nanosecond)
+			startTime = &baseline
+			log.Printf("Fresh mode: showing logs newer than %s", newest.Format(time.RFC3339))
+		} else {
+			// Database is empty, show all logs (no filter)
+			log.Println("Fresh mode: showing all logs (database is empty)")
+		}
 	} else {
 		log.Println("Showing all historic logs alongside new ones")
 	}
