@@ -51,7 +51,7 @@ export async function startServer(port = DEFAULT_PORT, { rows = 40 } = {}) {
   const proc = spawn('sh', ['-c', `
     for i in $(seq 1 ${rows}); do
       echo "{\\"level\\":\\"INFO\\",\\"msg\\":\\"Message $i\\",\\"time\\":\\"2026-02-18T10:$(printf '%02d' $i):00Z\\",\\"service\\":\\"api\\",\\"user_id\\":\\"user$i\\",\\"request_id\\":\\"req-$i\\"}"
-    done | go run ./cmd/peek --port ${port} --no-browser
+    done | go run ./cmd/peek --port ${port} --no-browser --all
   `], { cwd: PROJECT_ROOT, stdio: ['pipe', 'pipe', 'pipe'] });
 
   // Poll until the HTTP server is ready

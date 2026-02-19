@@ -179,11 +179,6 @@ func (s *BadgerStorage) Query(filter Filter, limit, offset int) ([]*LogEntry, in
 			if err != nil {
 				return err
 			}
-
-			// Stop if we have enough entries
-			if len(entries) >= limit && skipped >= offset {
-				break
-			}
 		}
 
 		return nil
