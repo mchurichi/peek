@@ -19,10 +19,11 @@ var indexHTML string
 
 // Server represents the HTTP server
 type Server struct {
-	storage  *storage.BadgerStorage
-	upgrader websocket.Upgrader
-	clients  map[*websocket.Conn]*client
-	mu       sync.RWMutex
+	storage       *storage.BadgerStorage
+	upgrader      websocket.Upgrader
+	clients       map[*websocket.Conn]*client
+	mu            sync.RWMutex
+	defaultFilter query.Filter // Default filter applied to all queries (e.g., for fresh mode)
 }
 
 type client struct {
@@ -34,8 +35,8 @@ type client struct {
 }
 
 // NewServer creates a new HTTP server
-func NewServer(storage *storage.BadgerStorage) *Server {
-	return &Server{
+func NewServer(storage *storage.BadgerStorage, startTime *time.Time) *Server {
+	s := &Server{
 		storage: storage,
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
@@ -44,6 +45,16 @@ func NewServer(storage *storage.BadgerStorage) *Server {
 		},
 		clients: make(map[*websocket.Conn]*client),
 	}
+
+	// If startTime is provided, create a default filter for fresh mode
+	if startTime != nil {
+		s.defaultFilter = &query.TimestampRangeFilter{
+			Start: *startTime,
+			End:   time.Time{}, // No end time
+		}
+	}
+
+	return s
 }
 
 // Start starts the HTTP server
@@ -142,9 +153,18 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Apply default filter (e.g., for fresh mode)
+	var filter query.Filter = q
+	if s.defaultFilter != nil {
+		filter = &query.AndFilter{
+			Left:  s.defaultFilter,
+			Right: q,
+		}
+	}
+
 	// Execute query
 	start := time.Now()
-	entries, total, err := s.storage.Query(q, req.Limit, req.Offset)
+	entries, total, err := s.storage.Query(filter, req.Limit, req.Offset)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -226,10 +246,19 @@ func (s *Server) readPump(c *client) {
 				continue
 			}
 
-			c.filter = q
+			// Apply default filter (e.g., for fresh mode)
+			var filter query.Filter = q
+			if s.defaultFilter != nil {
+				filter = &query.AndFilter{
+					Left:  s.defaultFilter,
+					Right: q,
+				}
+			}
+
+			c.filter = filter
 
 			// Send initial results
-			go s.sendInitialResults(c, q)
+			go s.sendInitialResults(c, filter)
 
 		} else if msg.Action == "unsubscribe" {
 			c.filter = nil

@@ -486,6 +486,84 @@ func TestLogEntry_ToJSON_FromJSON(t *testing.T) {
 	}
 }
 
+func TestBadgerStorage_DeleteOlderThan_CleansIndex(t *testing.T) {
+	dbPath := t.TempDir()
+
+	cfg := Config{
+		DBPath:        dbPath,
+		RetentionSize: 1024 * 1024 * 100,
+		RetentionDays: 30,
+	}
+
+	store, err := NewBadgerStorage(cfg)
+	if err != nil {
+		t.Fatalf("NewBadgerStorage() error = %v", err)
+	}
+	defer store.Close()
+
+	now := time.Now()
+
+	// Store old entries (2 days ago)
+	oldEntries := []*LogEntry{
+		{ID: "old-1", Timestamp: now.Add(-48 * time.Hour), Level: "DEBUG", Message: "old debug", Fields: map[string]interface{}{}, Raw: "old1"},
+		{ID: "old-2", Timestamp: now.Add(-49 * time.Hour), Level: "ERROR", Message: "old error", Fields: map[string]interface{}{}, Raw: "old2"},
+	}
+	// Store recent entries
+	newEntries := []*LogEntry{
+		{ID: "new-1", Timestamp: now.Add(-1 * time.Hour), Level: "DEBUG", Message: "new debug", Fields: map[string]interface{}{}, Raw: "new1"},
+		{ID: "new-2", Timestamp: now, Level: "ERROR", Message: "new error", Fields: map[string]interface{}{}, Raw: "new2"},
+	}
+
+	for _, e := range append(oldEntries, newEntries...) {
+		if err := store.Store(e); err != nil {
+			t.Fatalf("Store() error = %v", err)
+		}
+	}
+
+	// Verify initial stats
+	stats, err := store.GetStats()
+	if err != nil {
+		t.Fatalf("GetStats() error = %v", err)
+	}
+	if stats.TotalLogs != 4 {
+		t.Fatalf("Initial TotalLogs = %d, want 4", stats.TotalLogs)
+	}
+
+	// Delete entries older than 24 hours
+	cutoff := now.Add(-24 * time.Hour)
+	deleted, err := store.DeleteOlderThan(cutoff)
+	if err != nil {
+		t.Fatalf("DeleteOlderThan() error = %v", err)
+	}
+	if deleted != 2 {
+		t.Errorf("DeleteOlderThan() deleted = %d, want 2", deleted)
+	}
+
+	// Verify stats after deletion — level counts must reflect only remaining entries
+	stats, err = store.GetStats()
+	if err != nil {
+		t.Fatalf("GetStats() after delete error = %v", err)
+	}
+	if stats.TotalLogs != 2 {
+		t.Errorf("After delete TotalLogs = %d, want 2", stats.TotalLogs)
+	}
+	if count, ok := stats.Levels["DEBUG"]; !ok || count != 1 {
+		t.Errorf("After delete Levels[DEBUG] = %d, want 1", count)
+	}
+	if count, ok := stats.Levels["ERROR"]; !ok || count != 1 {
+		t.Errorf("After delete Levels[ERROR] = %d, want 1", count)
+	}
+
+	// Verify only new entries remain via query
+	results, _, err := store.Query(AllFilter{}, 100, 0)
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if len(results) != 2 {
+		t.Errorf("After delete Query() returned %d entries, want 2", len(results))
+	}
+}
+
 func TestExpandPath(t *testing.T) {
 	tests := []struct {
 		name string

@@ -38,12 +38,12 @@ go install github.com/mchurichi/peek/cmd/peek@latest
 
 ## Quick Start
 
-### Collect & View in Real Time
+### Collect & View in Real Time (Fresh Mode)
 
-Pipe logs from any source — the web UI starts automatically:
+Pipe logs from any source — the web UI starts automatically and shows only logs from the current session:
 
 ```bash
-# From a file
+# From a file (fresh mode - only shows logs from this session)
 cat application.log | peek
 
 # From a running process
@@ -54,16 +54,46 @@ kubectl logs my-pod -f | peek
 
 # With a custom port
 kubectl logs my-pod -f | peek --port 8081
+
+# Show all historic logs alongside new ones
+kubectl logs my-pod -f | peek --all
 ```
 
-The browser auto-opens to `http://localhost:8080`. Logs stream to the UI in real time via WebSocket. After stdin closes, the server stays alive so you can keep browsing — press `Ctrl+C` to exit.
+The browser auto-opens to `http://localhost:8080`. Logs stream to the UI in real time via WebSocket. 
+
+**Fresh Mode (default)**: By default, the UI only shows logs from the current piping session. Historic logs in the database are filtered out. This is ideal for live debugging.
+
+**All Mode (`--all`)**: Use the `--all` flag to see all stored logs alongside newly piped ones.
+
+After stdin closes, the server stays alive so you can keep browsing — press `Ctrl+C` to exit.
 
 ### Browse Previously Collected Logs
 
-Start the web UI in standalone server mode:
+Start the web UI in standalone server mode to browse all stored logs:
 
 ```bash
 peek server
+```
+
+### Database Management
+
+View and manage your log database:
+
+```bash
+# Show database statistics
+peek db stats
+
+# Delete all logs (with confirmation)
+peek db clean
+
+# Delete all logs (skip confirmation)
+peek db clean --force
+
+# Delete logs older than 7 days
+peek db clean --older-than 7d --force
+
+# Delete only DEBUG level logs
+peek db clean --level DEBUG --force
 ```
 
 ## Usage
@@ -76,6 +106,7 @@ Collects logs from stdin and starts an embedded web UI for real-time viewing:
 cat app.log | peek [OPTIONS]
 
 Options:
+  --all                  Show all historic logs alongside new ones (default: fresh mode)
   --config FILE          Path to config file (default: ~/.peek/config.toml)
   --db-path PATH         Database path (default: ~/.peek/db)
   --retention-size SIZE  Max storage (e.g., 1GB, 500MB)
@@ -99,6 +130,56 @@ Options:
   --port PORT       HTTP port (default: 8080)
   --no-browser      Don't auto-open browser
   --help             Show help
+```
+
+### Database Management
+
+Manage your log database:
+
+```bash
+# Show database statistics
+peek db stats [OPTIONS]
+
+# Delete logs from database
+peek db clean [OPTIONS]
+
+Options for 'db stats':
+  --config FILE      Path to config file (default: ~/.peek/config.toml)
+  --db-path PATH     Database path (default: ~/.peek/db)
+
+Options for 'db clean':
+  --config FILE          Path to config file (default: ~/.peek/config.toml)
+  --db-path PATH         Database path (default: ~/.peek/db)
+  --older-than DURATION  Delete logs older than duration (e.g., 24h, 7d, 2w)
+  --level LEVEL          Delete only logs matching level (e.g., DEBUG)
+  --force                Skip confirmation prompt
+```
+
+**Examples:**
+
+```bash
+# View database info
+peek db stats
+# Output:
+# Database Statistics
+# ===================
+# Path:          /home/user/.peek/db
+# Total logs:    14,382
+# Database size: 238.45 MB
+# Oldest entry:  2026-02-01T10:30:45Z
+# Newest entry:  2026-02-18T22:15:30Z
+
+# Delete all logs (with confirmation)
+peek db clean
+
+# Delete all logs (skip confirmation)
+peek db clean --force
+
+# Delete logs older than 7 days
+peek db clean --older-than 7d --force
+
+# Delete only DEBUG level logs
+peek db clean --level DEBUG --force
 ```
 
 ## Query Syntax
