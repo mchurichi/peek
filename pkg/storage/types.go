@@ -15,6 +15,13 @@ type LogEntry struct {
 	Raw       string                 `json:"raw"`
 }
 
+// FieldInfo describes a field name observed in stored logs and its most common values.
+type FieldInfo struct {
+	Name      string   `json:"name"`
+	Type      string   `json:"type"`
+	TopValues []string `json:"top_values"`
+}
+
 // ToJSON serializes the LogEntry to JSON
 func (l *LogEntry) ToJSON() ([]byte, error) {
 	return json.Marshal(l)

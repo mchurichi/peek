@@ -68,6 +68,7 @@ func (s *Server) Start(port int) error {
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/stats", s.handleStats)
 	mux.HandleFunc("/query", s.handleQuery)
+	mux.HandleFunc("/fields", s.handleFields)
 	mux.HandleFunc("/logs", s.handleWebSocket)
 
 	addr := fmt.Sprintf(":%d", port)
@@ -184,6 +185,37 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+// handleFields handles GET /fields
+func (s *Server) handleFields(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	q := r.URL.Query()
+	var start, end time.Time
+
+	if v := q.Get("start"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			start = t
+		}
+	}
+	if v := q.Get("end"); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			end = t
+		}
+	}
+
+	fields, err := s.storage.GetFields(start, end)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"fields": fields})
 }
 
 // handleWebSocket handles WS /logs

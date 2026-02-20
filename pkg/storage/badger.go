@@ -728,6 +728,103 @@ func (s *BadgerStorage) Scan(callback func(*LogEntry) error) error {
 	})
 }
 
+// GetFields returns distinct field names and their top values from stored log entries.
+// start and end are optional; zero values mean no bound.
+func (s *BadgerStorage) GetFields(start, end time.Time) ([]FieldInfo, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	const maxTopValues = 10
+
+	// fieldValues maps field name → value → count
+	fieldValues := make(map[string]map[string]int)
+
+	// Initialize built-in fields so they always appear in the result.
+	for _, b := range []string{"level", "message", "timestamp"} {
+		fieldValues[b] = make(map[string]int)
+	}
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = true
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		prefix := []byte(logPrefix)
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			err := it.Item().Value(func(val []byte) error {
+				entry, err := FromJSON(val)
+				if err != nil {
+					return nil // skip
+				}
+				if !start.IsZero() && entry.Timestamp.Before(start) {
+					return nil
+				}
+				if !end.IsZero() && entry.Timestamp.After(end) {
+					return nil
+				}
+				// Built-in field values
+				if entry.Level != "" {
+					fieldValues["level"][entry.Level]++
+				}
+				// Dynamic fields
+				for k, v := range entry.Fields {
+					if fieldValues[k] == nil {
+						fieldValues[k] = make(map[string]int)
+					}
+					fieldValues[k][fmt.Sprintf("%v", v)]++
+				}
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get fields: %w", err)
+	}
+
+	// Build result slice.
+	result := make([]FieldInfo, 0, len(fieldValues))
+	for name, valCounts := range fieldValues {
+		result = append(result, FieldInfo{
+			Name:      name,
+			Type:      "string",
+			TopValues: topN(valCounts, maxTopValues),
+		})
+	}
+
+	return result, nil
+}
+
+// topN returns up to n keys from counts, ordered by descending count.
+func topN(counts map[string]int, n int) []string {
+	type kv struct {
+		key   string
+		count int
+	}
+	items := make([]kv, 0, len(counts))
+	for k, c := range counts {
+		items = append(items, kv{k, c})
+	}
+	// Simple insertion sort (fields typically small)
+	for i := 1; i < len(items); i++ {
+		for j := i; j > 0 && items[j].count > items[j-1].count; j-- {
+			items[j], items[j-1] = items[j-1], items[j]
+		}
+	}
+	result := make([]string, 0, n)
+	for i, item := range items {
+		if i >= n {
+			break
+		}
+		result = append(result, item.key)
+	}
+	return result
+}
+
 // Subscribe creates a channel for real-time log updates
 func (s *BadgerStorage) Subscribe(filter Filter) (<-chan *LogEntry, func()) {
 	ch := make(chan *LogEntry, 100)
