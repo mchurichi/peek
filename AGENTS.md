@@ -20,6 +20,7 @@ npm run test:e2e
 # Single E2E spec
 node e2e/table.spec.mjs
 node e2e/resize.spec.mjs
+node e2e/search.spec.mjs
 ```
 
 No linter or formatter is configured yet. Use `go vet ./...` for basic checks.
@@ -31,14 +32,15 @@ cmd/peek/main.go          CLI entry point, flag parsing, collect/server routing
 internal/config/config.go  TOML config, defaults, size parsing
 pkg/parser/detector.go     Auto-detection of log formats (JSON, logfmt)
 pkg/parser/parser.go       JSON and logfmt parsers
-pkg/storage/types.go       LogEntry struct, Filter interface, Stats
-pkg/storage/badger.go      BadgerDB: Store, Query, Scan, retention
+pkg/storage/types.go       LogEntry struct, FieldInfo struct, Filter interface, Stats
+pkg/storage/badger.go      BadgerDB: Store, Query, Scan, GetFields, retention
 pkg/query/lucene.go        Lucene query parser (AND/OR/NOT, field:value, wildcards, ranges)
-pkg/server/server.go       HTTP server, /query, WebSocket /logs, broadcast
+pkg/server/server.go       HTTP server, /query, /fields, WebSocket /logs, broadcast
 pkg/server/index.html      Web UI (embedded via //go:embed)
 e2e/helpers.mjs            Shared Playwright helpers
 e2e/table.spec.mjs         Table rendering, expand/collapse, pinned columns
 e2e/resize.spec.mjs        Column resize behavior
+e2e/search.spec.mjs        Search syntax highlighting and field autocompletion
 e2e/screenshot.mjs         Screenshot generator with realistic data
 .github/workflows/ci.yml   CI pipeline (build, vet, unit tests, E2E tests)
 ```
@@ -57,6 +59,7 @@ stdin → Parser (JSON/logfmt/auto) → BadgerDB (~/.peek/db)
                               HTTP Server (localhost:8080)
                               ├─ GET  /health
                               ├─ GET  /stats
+                              ├─ GET  /fields (distinct field names + top values)
                               ├─ POST /query
                               ├─ WS   /logs (real-time)
                               └─ Web UI (embedded)
@@ -80,6 +83,8 @@ Secondary index: `index:level:{LEVEL}:{timestamp_nano}:{id}`.
 - Grid-based table using CSS Grid with `display: contents` rows, not `<table>`
 - Column pinning: click field keys in expanded detail rows
 - Column resize: drag handles manipulate `gridTemplateColumns`
+- Search bar: transparent `<input>` over a syntax-highlight `<div>` (`.search-highlight`) for Lucene token coloring
+- Autocomplete dropdown (`.search-autocomplete`) populated from `/fields` API; dismiss with Escape, navigate with arrow keys, accept with Tab/Enter
 
 ### E2E Tests
 - Raw Playwright scripts, no test runner

@@ -36,6 +36,9 @@ try {
 
   // ── 1. /fields API ──────────────────────────────
   console.log('\n1️⃣  /fields API');
+  // Navigate to page first so page.evaluate has a proper browsing context
+  await page.goto(BASE_URL);
+  await setTimeout(1000);
   const fieldsResp = await page.evaluate(() =>
     fetch('/fields').then(r => r.json())
   );
@@ -54,8 +57,7 @@ try {
 
   // ── 2. Page loads with highlight overlay ────────
   console.log('\n2️⃣  Highlight overlay present');
-  await page.goto(BASE_URL);
-  await setTimeout(2000);
+  await setTimeout(2000); // ensure VanJS has rendered
 
   const hlExists = await page.evaluate(() =>
     !!document.querySelector('.search-highlight')

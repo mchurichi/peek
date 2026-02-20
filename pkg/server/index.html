@@ -841,21 +841,6 @@
                 updateHighlight()
             }
 
-            // Rebuild dropdown items reactively
-            van.derive(() => {
-                const items = completions.val
-                const sel   = selectedIdx.val
-                dropdownEl.style.display = (showDropdown.val && items.length > 0) ? 'block' : 'none'
-                dropdownEl.innerHTML = ''
-                items.forEach((item, idx) => {
-                    const el = document.createElement('div')
-                    el.className = 'search-autocomplete-item' + (idx === sel ? ' selected' : '')
-                    el.textContent = item.text
-                    el.addEventListener('mousedown', e => { e.preventDefault(); acceptCompletion(item) })
-                    dropdownEl.appendChild(el)
-                })
-            })
-
             const inp = input({
                 type: "text",
                 class: "search-editor-input",
@@ -897,6 +882,21 @@
                 onblur: () => { setTimeout(() => { showDropdown.val = false; selectedIdx.val = -1 }, 150) },
             })
             queryInputEl = inp
+
+            // Rebuild dropdown items reactively
+            van.derive(() => {
+                const items = completions.val
+                const sel   = selectedIdx.val
+                dropdownEl.style.display = (showDropdown.val && items.length > 0) ? 'block' : 'none'
+                dropdownEl.innerHTML = ''
+                items.forEach((item, idx) => {
+                    const el = document.createElement('div')
+                    el.className = 'search-autocomplete-item' + (idx === sel ? ' selected' : '')
+                    el.textContent = item.text
+                    el.addEventListener('mousedown', e => { e.preventDefault(); acceptCompletion(item) })
+                    dropdownEl.appendChild(el)
+                })
+            })
 
             const wrapper = div({class: "search-editor"}, hlDiv, inp, dropdownEl)
 

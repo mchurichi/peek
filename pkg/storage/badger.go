@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -751,17 +752,41 @@ func (s *BadgerStorage) GetFields(start, end time.Time) ([]FieldInfo, error) {
 		defer it.Close()
 
 		prefix := []byte(logPrefix)
-		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+
+		// Seek directly to the start of the requested time range when provided.
+		// Keys are "log:{timestamp_nano}:{id}" in ascending order; nanosecond
+		// timestamps since 2001 are always 19 digits, so lexicographic order
+		// matches chronological order.
+		var seekKey []byte
+		if !start.IsZero() {
+			seekKey = []byte(fmt.Sprintf("%s%d:", logPrefix, start.UnixNano()))
+		} else {
+			seekKey = prefix
+		}
+
+		endNano := int64(0)
+		if !end.IsZero() {
+			endNano = end.UnixNano()
+		}
+
+		for it.Seek(seekKey); it.ValidForPrefix(prefix); it.Next() {
+			// Early exit when entry exceeds end time.
+			if endNano > 0 {
+				key := string(it.Item().Key())
+				parts := strings.SplitN(key[len(logPrefix):], ":", 2)
+				if len(parts) >= 1 {
+					var ts int64
+					fmt.Sscanf(parts[0], "%d", &ts)
+					if ts > endNano {
+						break
+					}
+				}
+			}
+
 			err := it.Item().Value(func(val []byte) error {
 				entry, err := FromJSON(val)
 				if err != nil {
 					return nil // skip
-				}
-				if !start.IsZero() && entry.Timestamp.Before(start) {
-					return nil
-				}
-				if !end.IsZero() && entry.Timestamp.After(end) {
-					return nil
 				}
 				// Built-in field values
 				if entry.Level != "" {
@@ -809,12 +834,7 @@ func topN(counts map[string]int, n int) []string {
 	for k, c := range counts {
 		items = append(items, kv{k, c})
 	}
-	// Simple insertion sort (fields typically small)
-	for i := 1; i < len(items); i++ {
-		for j := i; j > 0 && items[j].count > items[j-1].count; j-- {
-			items[j], items[j-1] = items[j-1], items[j]
-		}
-	}
+	sort.Slice(items, func(i, j int) bool { return items[i].count > items[j].count })
 	result := make([]string, 0, n)
 	for i, item := range items {
 		if i >= n {
