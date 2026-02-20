@@ -63,7 +63,6 @@ stdin → Parser (JSON/logfmt/auto) → BadgerDB (~/.peek/db)
 ```
 
 BadgerDB keys: `log:{timestamp_nano}:{id}` — enables time-range key seeking.
-Secondary index: `index:level:{LEVEL}:{timestamp_nano}:{id}`.
 
 ## Code Conventions
 
@@ -72,7 +71,7 @@ Secondary index: `index:level:{LEVEL}:{timestamp_nano}:{id}`.
 - Wrap errors: `fmt.Errorf("context: %w", err)`
 - Storage methods hold `sync.RWMutex` for concurrent access
 - All query filters implement `Filter` interface: `Match(*LogEntry) bool`
-- Key prefixes: `log:`, `index:level:`, `meta:`
+- Key prefixes: `log:`
 
 ### Web UI
 - VanJS reactive state via `van.state()` and `van.derive()`

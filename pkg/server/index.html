@@ -232,6 +232,7 @@
         .level-INFO { color: #42a5f5; }
         .level-DEBUG { color: #616161; }
         .level-TRACE { color: #424242; }
+        .level-NONE { color: #757575; }
         .log-message { color: #c8c8c8; }
 
         .fields-table {
@@ -614,6 +615,8 @@
         function LogRow(entry, isNew) {
             const expanded = van.state(false)
             const level = entry.level ? entry.level.toUpperCase() : ""
+            const levelClass = level || "NONE"
+            const levelDisplay = level || "\u2014"
 
             // Watch for expansion changes and restore scroll
             van.derive(() => {
@@ -656,7 +659,7 @@
             
             // Fixed columns
             van.add(mainRow, div({class: "col-time"}, fmtTime(entry.timestamp)))
-            van.add(mainRow, div({class: `col-level level-${level}`}, level))
+            van.add(mainRow, div({class: `col-level level-${levelClass}`}, levelDisplay))
             van.add(mainRow, div({class: "col-msg"}, entry.message))
 
             // Pinned columns

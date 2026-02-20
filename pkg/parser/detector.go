@@ -35,7 +35,6 @@ func (d *Detector) Parse(line string) (*storage.LogEntry, error) {
 	return &storage.LogEntry{
 		ID:        generateID(),
 		Timestamp: timeNow(),
-		Level:     "INFO",
 		Message:   line,
 		Fields:    make(map[string]interface{}),
 		Raw:       line,

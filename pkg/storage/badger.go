@@ -12,9 +12,7 @@ import (
 )
 
 const (
-	logPrefix        = "log:"
-	levelIndexPrefix = "index:level:"
-	metaPrefix       = "meta:"
+	logPrefix = "log:"
 )
 
 // BadgerStorage implements log storage with Badger
@@ -104,12 +102,6 @@ func (s *BadgerStorage) Store(entry *LogEntry) error {
 			return err
 		}
 
-		// Store level index
-		levelKey := fmt.Sprintf("%s%s:%d:%s", levelIndexPrefix, entry.Level, entry.Timestamp.UnixNano(), entry.ID)
-		if err := txn.Set([]byte(levelKey), []byte(entry.ID)); err != nil {
-			return err
-		}
-
 		return nil
 	})
 
@@ -196,35 +188,30 @@ func (s *BadgerStorage) GetStats() (Stats, error) {
 		Levels: make(map[string]int),
 	}
 
-	// Count total logs and by level
+	// Count total logs and by level from primary log entries
 	err := s.db.View(func(txn *badger.Txn) error {
-		// Count total logs
 		opts := badger.DefaultIteratorOptions
-		opts.PrefetchValues = false
+		opts.PrefetchValues = true
 		it := txn.NewIterator(opts)
 		defer it.Close()
 
 		prefix := []byte(logPrefix)
 		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
 			stats.TotalLogs++
-		}
-
-		// Count by level
-		levelPrefix := []byte(levelIndexPrefix)
-		it2 := txn.NewIterator(opts)
-		defer it2.Close()
-
-		currentLevel := ""
-		for it2.Seek(levelPrefix); it2.ValidForPrefix(levelPrefix); it2.Next() {
-			key := string(it2.Item().Key())
-			// Extract level from key: index:level:{LEVEL}:{timestamp}:{id}
-			parts := strings.SplitN(key[len(levelIndexPrefix):], ":", 2)
-			if len(parts) > 0 {
-				level := parts[0]
-				if level != currentLevel {
-					currentLevel = level
+			err := it.Item().Value(func(val []byte) error {
+				entry, err := FromJSON(val)
+				if err != nil {
+					return nil // skip invalid entries
+				}
+				level := entry.Level
+				if level == "" {
+					level = "Unknown"
 				}
 				stats.Levels[level]++
+				return nil
+			})
+			if err != nil {
+				return err
 			}
 		}
 
@@ -268,7 +255,6 @@ func (s *BadgerStorage) enforceRetention() error {
 // deleteOldestEntries deletes approximately targetBytes worth of oldest entries
 func (s *BadgerStorage) deleteOldestEntries(targetBytes int) error {
 	var keysToDelete [][]byte
-	var indexKeysToDelete [][]byte
 	deletedSize := 0
 
 	err := s.db.View(func(txn *badger.Txn) error {
@@ -282,20 +268,6 @@ func (s *BadgerStorage) deleteOldestEntries(targetBytes int) error {
 			item := it.Item()
 			keysToDelete = append(keysToDelete, item.KeyCopy(nil))
 			deletedSize += int(item.EstimatedSize())
-
-			// Also collect the corresponding level index key
-			err := item.Value(func(val []byte) error {
-				entry, err := FromJSON(val)
-				if err != nil {
-					return nil // Skip invalid entries
-				}
-				levelKey := fmt.Sprintf("%s%s:%d:%s", levelIndexPrefix, entry.Level, entry.Timestamp.UnixNano(), entry.ID)
-				indexKeysToDelete = append(indexKeysToDelete, []byte(levelKey))
-				return nil
-			})
-			if err != nil {
-				return err
-			}
 
 			if deletedSize >= targetBytes {
 				break
@@ -316,11 +288,6 @@ func (s *BadgerStorage) deleteOldestEntries(targetBytes int) error {
 				return err
 			}
 		}
-		for _, key := range indexKeysToDelete {
-			if err := txn.Delete(key); err != nil {
-				return err
-			}
-		}
 		return nil
 	})
 }
@@ -329,11 +296,10 @@ func (s *BadgerStorage) deleteOldestEntries(targetBytes int) error {
 func (s *BadgerStorage) deleteEntriesOlderThan(cutoff time.Time) error {
 	cutoffNano := cutoff.UnixNano()
 	var keysToDelete [][]byte
-	var indexKeysToDelete [][]byte
 
 	err := s.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
-		opts.PrefetchValues = true
+		opts.PrefetchValues = false
 		it := txn.NewIterator(opts)
 		defer it.Close()
 
@@ -347,20 +313,6 @@ func (s *BadgerStorage) deleteEntriesOlderThan(cutoff time.Time) error {
 				fmt.Sscanf(parts[0], "%d", &ts)
 				if ts < cutoffNano {
 					keysToDelete = append(keysToDelete, it.Item().KeyCopy(nil))
-
-					// Also collect the corresponding level index key
-					err := it.Item().Value(func(val []byte) error {
-						entry, err := FromJSON(val)
-						if err != nil {
-							return nil // Skip invalid entries
-						}
-						levelKey := fmt.Sprintf("%s%s:%d:%s", levelIndexPrefix, entry.Level, entry.Timestamp.UnixNano(), entry.ID)
-						indexKeysToDelete = append(indexKeysToDelete, []byte(levelKey))
-						return nil
-					})
-					if err != nil {
-						return err
-					}
 				}
 			}
 		}
@@ -375,11 +327,6 @@ func (s *BadgerStorage) deleteEntriesOlderThan(cutoff time.Time) error {
 	// Delete keys in batches
 	return s.db.Update(func(txn *badger.Txn) error {
 		for _, key := range keysToDelete {
-			if err := txn.Delete(key); err != nil {
-				return err
-			}
-		}
-		for _, key := range indexKeysToDelete {
 			if err := txn.Delete(key); err != nil {
 				return err
 			}
@@ -452,26 +399,17 @@ func (s *BadgerStorage) DeleteAll() (int, error) {
 	count := 0
 	var keysToDelete [][]byte
 
-	// Collect all log keys and level index keys
+	// Collect all log keys
 	err := s.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchValues = false
 		it := txn.NewIterator(opts)
 		defer it.Close()
 
-		// Collect log keys
 		logPrefixBytes := []byte(logPrefix)
 		for it.Seek(logPrefixBytes); it.ValidForPrefix(logPrefixBytes); it.Next() {
 			keysToDelete = append(keysToDelete, it.Item().KeyCopy(nil))
 			count++
-		}
-
-		// Collect level index keys
-		levelPrefixBytes := []byte(levelIndexPrefix)
-		it2 := txn.NewIterator(opts)
-		defer it2.Close()
-		for it2.Seek(levelPrefixBytes); it2.ValidForPrefix(levelPrefixBytes); it2.Next() {
-			keysToDelete = append(keysToDelete, it2.Item().KeyCopy(nil))
 		}
 
 		return nil
@@ -501,7 +439,6 @@ func (s *BadgerStorage) DeleteByLevel(level string) (int, error) {
 
 	count := 0
 	var keysToDelete [][]byte
-	var indexKeysToDelete [][]byte
 
 	// Collect keys for entries with the specified level
 	err := s.db.View(func(txn *badger.Txn) error {
@@ -522,10 +459,6 @@ func (s *BadgerStorage) DeleteByLevel(level string) (int, error) {
 				if entry.Level == level {
 					keysToDelete = append(keysToDelete, item.KeyCopy(nil))
 					count++
-
-					// Also collect corresponding level index key
-					levelKey := fmt.Sprintf("%s%s:%d:%s", levelIndexPrefix, entry.Level, entry.Timestamp.UnixNano(), entry.ID)
-					indexKeysToDelete = append(indexKeysToDelete, []byte(levelKey))
 				}
 
 				return nil
@@ -549,11 +482,6 @@ func (s *BadgerStorage) DeleteByLevel(level string) (int, error) {
 				return err
 			}
 		}
-		for _, key := range indexKeysToDelete {
-			if err := txn.Delete(key); err != nil {
-				return err
-			}
-		}
 		return nil
 	})
 
@@ -567,12 +495,11 @@ func (s *BadgerStorage) DeleteOlderThan(cutoff time.Time) (int, error) {
 
 	cutoffNano := cutoff.UnixNano()
 	var keysToDelete [][]byte
-	var indexKeysToDelete [][]byte
 	count := 0
 
 	err := s.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
-		opts.PrefetchValues = true
+		opts.PrefetchValues = false
 		it := txn.NewIterator(opts)
 		defer it.Close()
 
@@ -587,20 +514,6 @@ func (s *BadgerStorage) DeleteOlderThan(cutoff time.Time) (int, error) {
 				if ts < cutoffNano {
 					keysToDelete = append(keysToDelete, it.Item().KeyCopy(nil))
 					count++
-
-					// Also collect the corresponding level index key
-					err := it.Item().Value(func(val []byte) error {
-						entry, err := FromJSON(val)
-						if err != nil {
-							return nil // Skip invalid entries
-						}
-						levelKey := fmt.Sprintf("%s%s:%d:%s", levelIndexPrefix, entry.Level, entry.Timestamp.UnixNano(), entry.ID)
-						indexKeysToDelete = append(indexKeysToDelete, []byte(levelKey))
-						return nil
-					})
-					if err != nil {
-						return err
-					}
 				}
 			}
 		}
@@ -615,11 +528,6 @@ func (s *BadgerStorage) DeleteOlderThan(cutoff time.Time) (int, error) {
 	// Delete keys in batches
 	err = s.db.Update(func(txn *badger.Txn) error {
 		for _, key := range keysToDelete {
-			if err := txn.Delete(key); err != nil {
-				return err
-			}
-		}
-		for _, key := range indexKeysToDelete {
 			if err := txn.Delete(key); err != nil {
 				return err
 			}

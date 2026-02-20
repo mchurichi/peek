@@ -30,21 +30,21 @@ func TestDetector_Parse(t *testing.T) {
 		{
 			name:        "fallback to raw for plain text",
 			line:        `This is just plain text`,
-			wantLevel:   "INFO",
+			wantLevel:   "",
 			wantMessage: "This is just plain text",
 			wantFormat:  "raw",
 		},
 		{
 			name:        "fallback to raw for malformed JSON",
 			line:        `{"level":"ERROR"`,
-			wantLevel:   "INFO",
+			wantLevel:   "",
 			wantMessage: `{"level":"ERROR"`,
 			wantFormat:  "raw",
 		},
 		{
 			name:        "fallback to raw for empty line",
 			line:        ``,
-			wantLevel:   "INFO",
+			wantLevel:   "",
 			wantMessage: "",
 			wantFormat:  "raw",
 		},
@@ -107,7 +107,7 @@ func TestDetector_ParseWithFormat(t *testing.T) {
 			name:        "auto format falls back to Parse",
 			line:        `plain text`,
 			format:      "auto",
-			wantLevel:   "INFO",
+			wantLevel:   "",
 			wantMessage: "plain text",
 			wantErr:     false,
 		},
@@ -171,8 +171,8 @@ func TestDetector_RawFallback(t *testing.T) {
 	if !entry.Timestamp.Equal(fixedTime) {
 		t.Errorf("Raw fallback Timestamp = %v, want %v", entry.Timestamp, fixedTime)
 	}
-	if entry.Level != "INFO" {
-		t.Errorf("Raw fallback Level = %v, want INFO", entry.Level)
+	if entry.Level != "" {
+		t.Errorf("Raw fallback Level = %v, want empty string", entry.Level)
 	}
 	if entry.Message != "plain text log" {
 		t.Errorf("Raw fallback Message = %v, want 'plain text log'", entry.Message)
