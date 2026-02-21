@@ -21,6 +21,11 @@ npm run test:e2e
 node e2e/table.spec.mjs
 node e2e/resize.spec.mjs
 node e2e/search.spec.mjs
+node e2e/search-caret.spec.mjs
+
+# Manual test log generation
+node e2e/loggen.mjs --count 200
+node e2e/loggen.mjs --follow --rate 20 | go run ./cmd/peek --all --no-browser
 ```
 
 No linter or formatter is configured yet. Use `go vet ./...` for basic checks.
@@ -41,7 +46,9 @@ e2e/helpers.mjs            Shared Playwright helpers
 e2e/table.spec.mjs         Table rendering, expand/collapse, pinned columns
 e2e/resize.spec.mjs        Column resize behavior
 e2e/search.spec.mjs        Search syntax highlighting and field autocompletion
+e2e/search-caret.spec.mjs  Search caret/overlay alignment
 e2e/screenshot.mjs         Screenshot generator with realistic data
+e2e/loggen.mjs             Manual test-data log generator (json/logfmt/mixed)
 .github/workflows/ci.yml   CI pipeline (build, vet, unit tests, E2E tests)
 ```
 
@@ -103,4 +110,6 @@ BadgerDB keys: `log:{timestamp_nano}:{id}` — enables time-range key seeking.
 - **Filter interface**: new query features must implement `Match(*LogEntry) bool`
 - **BadgerDB key format**: maintain `log:{timestamp_nano}:{id}` — time-range optimizations depend on it
 - **New UI features need E2E tests** following the existing Playwright pattern
+- **Docs boundary**: `/README.md` is consumer-facing usage; `/docs/README.md` is technical/developer/testing guidance
+- **Technical utilities docs**: document tools like `e2e/loggen.mjs` in `/docs/README.md`, not `/README.md`
 - **Keep AGENTS.md up to date**: any change that alters build commands, project structure, dependencies, architecture, conventions, or critical rules documented here MUST include a corresponding update to this file in the same commit
