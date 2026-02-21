@@ -79,9 +79,9 @@ func TestJSONParser_Parse(t *testing.T) {
 			wantErr:     false,
 		},
 		{
-			name:        "JSON without level defaults to INFO",
+			name:        "JSON without level uses empty string",
 			line:        `{"timestamp":"2024-01-15T10:30:00Z","message":"no level"}`,
-			wantLevel:   "INFO",
+			wantLevel:   "",
 			wantMessage: "no level",
 			wantErr:     false,
 		},
@@ -215,9 +215,9 @@ func TestLogfmtParser_Parse(t *testing.T) {
 			wantErr:     false,
 		},
 		{
-			name:        "logfmt without level defaults to INFO",
+			name:        "logfmt without level uses empty string",
 			line:        `time=2024-01-15T10:30:00Z msg="no level"`,
-			wantLevel:   "INFO",
+			wantLevel:   "",
 			wantMessage: "no level",
 			wantErr:     false,
 		},

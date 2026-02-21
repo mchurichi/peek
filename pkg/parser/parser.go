@@ -68,8 +68,6 @@ func (p *JSONParser) Parse(line string) (*storage.LogEntry, error) {
 	} else if level, ok := obj["severity"].(string); ok {
 		entry.Level = strings.ToUpper(level)
 		delete(obj, "severity")
-	} else {
-		entry.Level = "INFO"
 	}
 
 	// Extract message
@@ -141,8 +139,6 @@ func (p *LogfmtParser) Parse(line string) (*storage.LogEntry, error) {
 	if level, ok := fields["level"]; ok {
 		entry.Level = NormalizeLevel(level)
 		delete(fields, "level")
-	} else {
-		entry.Level = "INFO"
 	}
 
 	// Extract message
