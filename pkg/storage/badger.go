@@ -181,15 +181,17 @@ func (s *BadgerStorage) Query(filter Filter, limit, offset int) ([]*LogEntry, in
 
 // GetStats returns storage statistics
 func (s *BadgerStorage) GetStats() (Stats, error) {
+	// Copy DB pointer under lock, then release so stats scan doesn't block writers.
 	s.mu.RLock()
-	defer s.mu.RUnlock()
+	db := s.db
+	s.mu.RUnlock()
 
 	stats := Stats{
 		Levels: make(map[string]int),
 	}
 
 	// Count total logs and by level from primary log entries
-	err := s.db.View(func(txn *badger.Txn) error {
+	err := db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchValues = true
 		it := txn.NewIterator(opts)

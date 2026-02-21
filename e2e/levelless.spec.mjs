@@ -120,11 +120,11 @@ try {
     await setTimeout(3_000);
   }
 
+  await cleanup();
   process.exit(exitCode);
 
 } catch (error) {
   console.error('❌ Error:', error);
-  process.exit(1);
-} finally {
   await cleanup();
+  process.exit(1);
 }
