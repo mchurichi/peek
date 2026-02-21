@@ -30,6 +30,7 @@
         .search-editor {
             position: relative;
             flex: 1;
+            box-sizing: border-box;
         }
 
         .search-editor-input {
@@ -44,6 +45,8 @@
             border-radius: 4px;
             font-family: ui-monospace, 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Courier New', monospace;
             font-size: 1.1rem;
+            line-height: 1.4;
+            box-sizing: border-box;
         }
 
         .search-editor-input:focus { outline: none; border-color: #4CAF50; }
@@ -57,12 +60,13 @@
             border-radius: 4px;
             font-family: ui-monospace, 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Courier New', monospace;
             font-size: 1.1rem;
+            line-height: 1.4;
             white-space: pre;
             overflow: hidden;
             pointer-events: none;
-            display: flex;
-            align-items: center;
+            display: block;
             color: #e0e0e0;
+            box-sizing: border-box;
         }
 
         /* Syntax highlight token colors */
@@ -385,6 +389,7 @@
         const autoScroll  = van.state(true)
         const searching   = van.state(false)
         const knownFields = van.state([])     // FieldInfo[] from /fields
+        const emptyMessage = van.state("")    // Empty-state headline override
 
         let ws = null
         let queryInputEl = null
@@ -409,6 +414,7 @@
             query.val = q
             searching.val = true
             statusText.val = ""
+            emptyMessage.val = ""
 
             try {
                 const res = await fetch("/query", {
@@ -416,17 +422,25 @@
                     headers: {"Content-Type": "application/json"},
                     body: JSON.stringify({query: q || "*", limit: 100, offset: 0})
                 })
+                if (!res.ok) {
+                    const msg = await res.text()
+                    throw new Error(msg || `Query failed with status ${res.status}`)
+                }
                 const data = await res.json()
                 logs.val = data.logs || []
                 totalCount.val = data.total
                 statusText.val = ""
+                emptyMessage.val = ""
 
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({action: "subscribe", query: q || "*"}))
                 }
             } catch (e) {
                 console.error("Query error:", e)
-                statusText.val = "Error executing query"
+                statusText.val = e?.message || "Error executing query"
+                emptyMessage.val = statusText.val
+                logs.val = []
+                totalCount.val = 0
             } finally {
                 searching.val = false
             }
@@ -1142,15 +1156,30 @@
             const expandedIds = new Set()  // track expanded rows across rebuilds
             let lastLogCount = 0  // track log count to detect new logs
             let preserveScroll = 0  // preserve scroll position across rebuilds
+            let lastStatusVal = ""
 
             van.derive(() => {
                 const entries = logs.val
                 const cols = pinned.val
+                const statusVal = (emptyMessage.val || statusText.val || "").trim()
 
                 // Force full rebuild when logs change or pinned columns change
                 const pinnedChanged = cols !== lastPinnedRef
                 const logsChanged = entries !== lastLogRef
                 const newLogsAdded = entries.length > lastLogCount
+                const statusChanged = statusVal !== lastStatusVal
+
+                // If only status changed while empty, update placeholder text without full rebuild
+                if (!logsChanged && !pinnedChanged && entries.length === 0 && statusChanged) {
+                    const empty = bodyEl.querySelector(".empty-state")
+                    if (empty) {
+                        const headline = statusVal.length > 0 ? statusVal : "No logs found"
+                        const subline  = statusVal.length > 0 ? "Fix the query and try again" : "Try a different query"
+                        empty.innerHTML = `<strong style="color:#888;">${headline}</strong><br>${subline}`
+                    }
+                    lastStatusVal = statusVal
+                    return
+                }
                 
                 // Always save current scroll position BEFORE any changes
                 if (logContainerEl && pinnedChanged && !newLogsAdded) {
@@ -1159,8 +1188,9 @@
                 
                 lastPinnedRef = cols
                 lastLogCount = entries.length
+                lastStatusVal = statusVal
 
-                if (logsChanged || pinnedChanged) {
+                if (logsChanged || pinnedChanged || (entries.length === 0 && statusChanged)) {
                     // Save expanded state before rebuild
                     bodyEl.querySelectorAll(".detail-row.visible").forEach(r => {
                         const mainRow = r.previousElementSibling
@@ -1172,9 +1202,14 @@
                     lastLogRef = entries
 
                     if (entries.length === 0) {
+                        const status = statusVal
+                        const showStatus = status.length > 0
                         const emptyDiv = document.createElement("div")
+                        emptyDiv.className = "empty-state"
                         emptyDiv.style.cssText = "grid-column: 1 / -1; text-align:center; padding:3rem; color:#666;"
-                        emptyDiv.innerHTML = '<strong style="color:#888;">No logs found</strong><br>Try a different query'
+                        const headline = showStatus ? status : "No logs found"
+                        const subline  = showStatus ? "Fix the query and try again" : "Try a different query"
+                        emptyDiv.innerHTML = `<strong style="color:#888;">${headline}</strong><br>${subline}`
                         bodyEl.appendChild(emptyDiv)
                         return
                     }

@@ -258,6 +258,22 @@ try {
   );
   assert('Highlight correct after clear and retype', freshField);
 
+  // ── 7. Invalid query request shows status error ─────────────
+  console.log('\n7️⃣  Invalid query sets status error');
+  await searchInput.fill('level:ERROR AND'); // invalid trailing operator
+  await searchInput.press('Enter');
+  await setTimeout(500);
+  const statusText = await page.evaluate(() =>
+    document.querySelector('.status')?.textContent?.trim() || ''
+  );
+  assert('Status shows error for invalid query', statusText.toLowerCase().includes('query'), statusText);
+  const clearedRows = await page.evaluate(() => document.querySelectorAll('.log-row').length);
+  assert('Logs cleared on invalid query', clearedRows === 0, `${clearedRows} rows`);
+  const emptyMessage = await page.evaluate(() =>
+    document.querySelector('.log-table-body > div')?.textContent?.trim() || ''
+  );
+  assert('Empty state shows error text', emptyMessage.includes(statusText), emptyMessage);
+
   // ── Summary ─────────────────────────────────────
   await page.screenshot({ path: '/tmp/peek-test-search.png', fullPage: false });
   console.log('\n📸 Screenshot: /tmp/peek-test-search.png');
