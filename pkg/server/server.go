@@ -27,11 +27,12 @@ type Server struct {
 }
 
 type client struct {
-	conn   *websocket.Conn
-	query  string
-	filter query.Filter
-	send   chan *storage.LogEntry
-	done   chan struct{}
+	conn      *websocket.Conn
+	query     string
+	filter    query.Filter
+	timeRange *storage.TimeRange
+	send      chan *storage.LogEntry
+	done      chan struct{}
 }
 
 // NewServer creates a new HTTP server
@@ -130,6 +131,8 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 		Query  string `json:"query"`
 		Limit  int    `json:"limit"`
 		Offset int    `json:"offset"`
+		Start  string `json:"start"`
+		End    string `json:"end"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -163,14 +166,36 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Parse optional time range parameters.
+	var tr *storage.TimeRange
+	var rangeStart, rangeEnd time.Time
+	if req.Start != "" {
+		if t, err := time.Parse(time.RFC3339, req.Start); err == nil {
+			rangeStart = t
+		}
+	}
+	if req.End != "" {
+		if t, err := time.Parse(time.RFC3339, req.End); err == nil {
+			rangeEnd = t
+		}
+	}
+	if !rangeStart.IsZero() || !rangeEnd.IsZero() {
+		tr = &storage.TimeRange{Start: rangeStart, End: rangeEnd}
+		// Also apply the time range as a filter so boundary conditions are correct.
+		filter = &query.AndFilter{
+			Left:  filter,
+			Right: &query.TimestampRangeFilter{Start: rangeStart, End: rangeEnd},
+		}
+	}
+
 	// Execute query
-	start := time.Now()
-	entries, total, err := s.storage.Query(filter, req.Limit, req.Offset)
+	executionStart := time.Now()
+	entries, total, err := s.storage.QueryWithTimeRange(filter, tr, req.Limit, req.Offset)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	took := time.Since(start)
+	took := time.Since(executionStart)
 	
 	// Ensure entries is never nil for JSON encoding
 	if entries == nil {
@@ -257,6 +282,8 @@ func (s *Server) readPump(c *client) {
 		var msg struct {
 			Action string `json:"action"`
 			Query  string `json:"query"`
+			Start  string `json:"start"`
+			End    string `json:"end"`
 		}
 
 		if err := c.conn.ReadJSON(&msg); err != nil {
@@ -287,13 +314,36 @@ func (s *Server) readPump(c *client) {
 				}
 			}
 
+			// Parse optional time range.
+			var tr *storage.TimeRange
+			var rangeStart, rangeEnd time.Time
+			if msg.Start != "" {
+				if t, err := time.Parse(time.RFC3339, msg.Start); err == nil {
+					rangeStart = t
+				}
+			}
+			if msg.End != "" {
+				if t, err := time.Parse(time.RFC3339, msg.End); err == nil {
+					rangeEnd = t
+				}
+			}
+			if !rangeStart.IsZero() || !rangeEnd.IsZero() {
+				tr = &storage.TimeRange{Start: rangeStart, End: rangeEnd}
+				filter = &query.AndFilter{
+					Left:  filter,
+					Right: &query.TimestampRangeFilter{Start: rangeStart, End: rangeEnd},
+				}
+			}
+
 			c.filter = filter
+			c.timeRange = tr
 
 			// Send initial results
 			go s.sendInitialResults(c, filter)
 
 		} else if msg.Action == "unsubscribe" {
 			c.filter = nil
+			c.timeRange = nil
 		}
 	}
 }
@@ -334,7 +384,7 @@ func (s *Server) writePump(c *client) {
 
 // sendInitialResults sends initial query results to a client
 func (s *Server) sendInitialResults(c *client, q query.Filter) {
-	entries, total, err := s.storage.Query(q, 100, 0)
+	entries, total, err := s.storage.QueryWithTimeRange(q, c.timeRange, 100, 0)
 	if err != nil {
 		log.Printf("Query error: %v", err)
 		return

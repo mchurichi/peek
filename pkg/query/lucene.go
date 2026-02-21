@@ -210,22 +210,57 @@ func (p *parser) parseRange(field, rangeStr string) (Filter, error) {
 	}, nil
 }
 
+// reDay matches a number followed by 'd' (days), e.g. "7d".
+var reDay = regexp.MustCompile(`(\d+)d`)
+
+// reWeek matches a number followed by 'w' (weeks), e.g. "2w".
+var reWeek = regexp.MustCompile(`(\d+)w`)
+
+// parseDurationExtended extends time.ParseDuration to support day ('d') and
+// week ('w') units by converting them to hours before parsing.
+func parseDurationExtended(s string) (time.Duration, error) {
+	s = reDay.ReplaceAllStringFunc(s, func(m string) string {
+		n, _ := strconv.Atoi(m[:len(m)-1])
+		return fmt.Sprintf("%dh", n*24)
+	})
+	s = reWeek.ReplaceAllStringFunc(s, func(m string) string {
+		n, _ := strconv.Atoi(m[:len(m)-1])
+		return fmt.Sprintf("%dh", n*7*24)
+	})
+	return time.ParseDuration(s)
+}
+
 func (p *parser) parseTimeValue(val string) time.Time {
-	// Handle relative time (e.g., now-1h)
+	// Handle relative time (e.g., now-1h, now-7d, now-2w)
 	if strings.HasPrefix(val, "now") {
 		duration := strings.TrimPrefix(val, "now")
 		if duration == "" {
 			return time.Now()
 		}
 		duration = strings.TrimPrefix(duration, "-")
-		if d, err := time.ParseDuration(duration); err == nil {
+		if d, err := parseDurationExtended(duration); err == nil {
 			return time.Now().Add(-d)
 		}
 	}
 
-	// Parse absolute timestamp
+	// Parse absolute RFC3339 timestamp
 	if t, err := time.Parse(time.RFC3339, val); err == nil {
 		return t
+	}
+
+	// Parse datetime without timezone (assume UTC)
+	if t, err := time.Parse("2006-01-02T15:04:05", val); err == nil {
+		return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), 0, time.UTC)
+	}
+
+	// Parse date-only string (start of day UTC)
+	if t, err := time.Parse("2006-01-02", val); err == nil {
+		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+	}
+
+	// Parse epoch milliseconds (values > 1e12 are clearly milliseconds, not seconds)
+	if ms, err := strconv.ParseInt(val, 10, 64); err == nil && ms > 1_000_000_000_000 {
+		return time.Unix(0, ms*int64(time.Millisecond)).UTC()
 	}
 
 	return time.Time{}

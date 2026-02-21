@@ -139,6 +139,51 @@
 
         .clear-btn:hover { color: #ef5350; }
 
+        /* Datetime range picker */
+        .time-range-picker {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.4rem;
+            flex-wrap: wrap;
+        }
+
+        .time-preset-select {
+            padding: 0.35rem 0.6rem;
+            background: #2a2a2a;
+            color: #ccc;
+            border: 1px solid #4d4d4d;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+
+        .time-preset-select:focus { outline: none; border-color: #4CAF50; }
+
+        .time-custom-range {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            flex-wrap: wrap;
+        }
+
+        .time-custom-range span {
+            color: #888;
+            font-size: 0.85rem;
+        }
+
+        .time-custom-input {
+            padding: 0.3rem 0.5rem;
+            background: #2a2a2a;
+            color: #ccc;
+            border: 1px solid #4d4d4d;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            color-scheme: dark;
+        }
+
+        .time-custom-input:focus { outline: none; border-color: #4CAF50; }
+
         main {
             flex: 1;
             overflow: hidden;
@@ -376,7 +421,7 @@
         import van from "https://cdn.jsdelivr.net/npm/vanjs-core@1.5.2/src/van.min.js"
 
         const {div, h1, header: hdr, main: mn, input, button, span, label, strong,
-               table, thead, tbody, tr, td, th, br} = van.tags
+               table, thead, tbody, tr, td, th, br, select: sel, option} = van.tags
 
         // ──────────────────────────────────────────
         // State
@@ -391,6 +436,11 @@
         const searching   = van.state(false)
         const knownFields = van.state([])     // FieldInfo[] from /fields
         const emptyMessage = van.state("")    // Empty-state headline override
+
+        // Time range filter state
+        const timePreset   = van.state("all")  // preset key
+        const timeStartStr = van.state("")     // datetime-local string for custom from
+        const timeEndStr   = van.state("")     // datetime-local string for custom to
 
         let ws = null
         let queryInputEl = null
@@ -410,6 +460,33 @@
         // ──────────────────────────────────────────
         // API & WebSocket
         // ──────────────────────────────────────────
+
+        // Compute start/end ISO strings from the current time-range state.
+        function getTimeRange() {
+            const preset = timePreset.val
+            const now = new Date()
+            if (preset === "15m")        return { start: new Date(now - 15*60*1000).toISOString(), end: "" }
+            if (preset === "1h")         return { start: new Date(now - 60*60*1000).toISOString(), end: "" }
+            if (preset === "6h")         return { start: new Date(now - 6*60*60*1000).toISOString(), end: "" }
+            if (preset === "24h")        return { start: new Date(now - 24*60*60*1000).toISOString(), end: "" }
+            if (preset === "7d")         return { start: new Date(now - 7*24*60*60*1000).toISOString(), end: "" }
+            if (preset === "today") {
+                const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+                return { start: today.toISOString(), end: "" }
+            }
+            if (preset === "yesterday") {
+                const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
+                const today     = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+                return { start: yesterday.toISOString(), end: today.toISOString() }
+            }
+            if (preset === "custom") {
+                const start = timeStartStr.val ? new Date(timeStartStr.val).toISOString() : ""
+                const end   = timeEndStr.val   ? new Date(timeEndStr.val).toISOString()   : ""
+                return { start, end }
+            }
+            return { start: "", end: "" }
+        }
+
         async function executeQuery() {
             const q = queryInputEl?.value?.trim() || ""
             query.val = q
@@ -418,10 +495,14 @@
             emptyMessage.val = ""
 
             try {
+                const { start, end } = getTimeRange()
+                const reqBody = {query: q || "*", limit: 100, offset: 0}
+                if (start) reqBody.start = start
+                if (end)   reqBody.end   = end
                 const res = await fetch("/query", {
                     method: "POST",
                     headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({query: q || "*", limit: 100, offset: 0})
+                    body: JSON.stringify(reqBody)
                 })
                 if (!res.ok) {
                     const msg = await res.text()
@@ -434,7 +515,11 @@
                 emptyMessage.val = ""
 
                 if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({action: "subscribe", query: q || "*"}))
+                    const { start: ws_start, end: ws_end } = getTimeRange()
+                    const wsMsg = {action: "subscribe", query: q || "*"}
+                    if (ws_start) wsMsg.start = ws_start
+                    if (ws_end)   wsMsg.end   = ws_end
+                    ws.send(JSON.stringify(wsMsg))
                 }
             } catch (e) {
                 console.error("Query error:", e)
@@ -453,7 +538,11 @@
 
             ws.onopen = () => {
                 wsStatus.val = "connected"
-                ws.send(JSON.stringify({action: "subscribe", query: query.val || "*"}))
+                const { start, end } = getTimeRange()
+                const wsMsg = {action: "subscribe", query: query.val || "*"}
+                if (start) wsMsg.start = start
+                if (end)   wsMsg.end   = end
+                ws.send(JSON.stringify(wsMsg))
             }
             ws.onmessage = ev => {
                 const data = JSON.parse(ev.data)
@@ -924,11 +1013,62 @@
                     }, "\u00D7"),
                     button({onclick: executeQuery}, "Search"),
                 ),
+                DateRangePicker(),
                 div({class: "query-examples"},
                     strong("Examples: "),
                     "level:ERROR | service:auth | timestamp:[now-1h TO now] | level:ERROR AND service:api | message:*timeout*"
                 ),
             )
+        }
+
+        // Datetime range picker
+        function DateRangePicker() {
+            const presets = [
+                { value: "all",       label: "All time" },
+                { value: "15m",       label: "Last 15 minutes" },
+                { value: "1h",        label: "Last 1 hour" },
+                { value: "6h",        label: "Last 6 hours" },
+                { value: "24h",       label: "Last 24 hours" },
+                { value: "7d",        label: "Last 7 days" },
+                { value: "today",     label: "Today" },
+                { value: "yesterday", label: "Yesterday" },
+                { value: "custom",    label: "Custom range…" },
+            ]
+
+            const presetEl = sel({
+                class: "time-preset-select",
+                "data-testid": "time-preset",
+                onchange: e => {
+                    timePreset.val = e.target.value
+                    if (e.target.value !== "custom") executeQuery()
+                },
+            }, ...presets.map(p => option({value: p.value}, p.label)))
+
+            const fromInput = input({
+                type: "datetime-local",
+                class: "time-custom-input",
+                "data-testid": "time-from",
+                oninput:  e => { timeStartStr.val = e.target.value },
+                onchange: () => executeQuery(),
+            })
+
+            const toInput = input({
+                type: "datetime-local",
+                class: "time-custom-input",
+                "data-testid": "time-to",
+                oninput:  e => { timeEndStr.val = e.target.value },
+                onchange: () => executeQuery(),
+            })
+
+            const customRangeEl = div({
+                class: "time-custom-range",
+                style: () => timePreset.val === "custom" ? "" : "display:none",
+            },
+                span("From:"), fromInput,
+                span("To:"),   toInput,
+            )
+
+            return div({class: "time-range-picker"}, presetEl, customRangeEl)
         }
 
         // Stats bar

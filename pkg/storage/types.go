@@ -22,6 +22,13 @@ type FieldInfo struct {
 	TopValues []string `json:"top_values"`
 }
 
+// TimeRange holds optional time bounds for storage-level key seeking.
+// Zero-value fields indicate no bound.
+type TimeRange struct {
+	Start time.Time
+	End   time.Time
+}
+
 // ToJSON serializes the LogEntry to JSON
 func (l *LogEntry) ToJSON() ([]byte, error) {
 	return json.Marshal(l)
