@@ -70,8 +70,5 @@ test.describe('resize', () => {
       document.querySelector('.log-table')?.style.gridTemplateColumns ?? ''
     );
     expect(gridTemplate.length).toBeGreaterThan(0);
-
-    // Intentional failure to exercise CI artifact uploads.
-    expect(gridTemplate).toContain('nonexistent-token');
   });
 });

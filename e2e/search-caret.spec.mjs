@@ -59,8 +59,5 @@ test.describe('search-caret', () => {
       getComputedStyle(document.querySelector('.search-highlight')).display
     );
     expect(displayMode).toBe('block');
-
-    // Intentional failure to exercise CI artifact uploads.
-    expect(displayMode).toBe('inline');
   });
 });
