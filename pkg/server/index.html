@@ -698,10 +698,19 @@
         }
 
         function filterByField(field, value) {
-            const v = value.includes(" ") ? `"${value}"` : value
+            const escaped = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+            const token = `${field}:"${escaped}"`
             if (queryInputEl) {
-                queryInputEl.value = `${field}:${v}`
+                const cur = queryInputEl.value.trim()
+                if (!cur || cur === '*') {
+                    queryInputEl.value = token
+                } else if (/(?:AND|OR|NOT|\()$/.test(cur)) {
+                    queryInputEl.value = cur + ' ' + token
+                } else {
+                    queryInputEl.value = cur + ' AND ' + token
+                }
                 updateHighlightGlobal()
+                queryInputEl.focus()
             }
             executeQuery()
         }
