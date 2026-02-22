@@ -400,6 +400,96 @@
 
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         .log-row.new td { animation: fadeIn 0.3s; }
+
+        /* Query history & starred panels */
+        .query-panel-wrapper {
+            position: relative;
+        }
+
+        .query-panel-btn {
+            padding: 0.75rem 1rem;
+            background: #333;
+            color: #ccc;
+            border: 1px solid #4d4d4d;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            white-space: nowrap;
+        }
+
+        .query-panel-btn:hover { background: #3d3d3d; color: #e0e0e0; }
+
+        .query-panel {
+            position: absolute;
+            top: calc(100% + 4px);
+            right: 0;
+            min-width: 300px;
+            max-width: 480px;
+            background: #2a2a2a;
+            border: 1px solid #4d4d4d;
+            border-radius: 4px;
+            z-index: 2000;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .query-panel-empty {
+            padding: 1rem;
+            text-align: center;
+            color: #555;
+            font-size: 0.85rem;
+        }
+
+        .query-panel-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 0.75rem;
+            cursor: pointer;
+            border-bottom: 1px solid #333;
+        }
+
+        .query-panel-item:hover { background: #3d3d3d; }
+
+        .query-panel-item .qp-text {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: #4CAF50;
+            font-family: ui-monospace, 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+
+        .query-panel-item .qp-copy {
+            padding: 0.15rem 0.4rem;
+            background: transparent;
+            color: #666;
+            border: 1px solid #555;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            flex-shrink: 0;
+            line-height: 1.3;
+        }
+
+        .query-panel-item .qp-copy:hover { color: #ccc; background: transparent; border-color: #888; }
+
+        .star-btn {
+            padding: 0.75rem 0.9rem;
+            background: #333;
+            color: #777;
+            border: 1px solid #4d4d4d;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            line-height: 1;
+            transition: color 0.2s;
+        }
+
+        .star-btn:hover { color: #ffd700; background: #333; }
+        .star-btn.starred { color: #ffd700; border-color: #888; }
     </style>
 </head>
 <body>
@@ -441,6 +531,75 @@
         let queryHighlightEl = null
         let logContainerEl = null
         let logTableEl = null
+
+        // ──────────────────────────────────────────
+        // Query History & Starred — localStorage
+        // ──────────────────────────────────────────
+        const HISTORY_KEY = 'peek.queryHistory.v1'
+        const STARRED_KEY = 'peek.starredQueries.v1'
+        const HISTORY_MAX = 50
+        const STARRED_MAX = 25
+
+        function loadStorage(key) {
+            try {
+                const raw = localStorage.getItem(key)
+                if (!raw) return null
+                return JSON.parse(raw)
+            } catch {
+                try { localStorage.removeItem(key) } catch {}
+                return null
+            }
+        }
+
+        function saveStorage(key, value) {
+            try { localStorage.setItem(key, JSON.stringify(value)) } catch {}
+        }
+
+        const queryHistory   = van.state(loadStorage(HISTORY_KEY) || [])
+        const starredQueries = van.state(loadStorage(STARRED_KEY) || [])
+        const historyNavIdx  = van.state(-1)  // -1 = live input, ≥0 = index into queryHistory
+        const liveQuery      = van.state("")  // current input value, updated on every keystroke
+
+        const currentIsStarred = van.derive(() =>
+            starredQueries.val.includes(liveQuery.val.trim())
+        )
+
+        function saveHistoryEntry(q) {
+            const trimmed = q.trim()
+            if (!trimmed || trimmed === '*') return
+            const now = new Date().toISOString()
+            const existing = queryHistory.val.find(e => e.query === trimmed)
+            let next
+            if (existing) {
+                next = [
+                    { query: trimmed, lastUsedAt: now, useCount: existing.useCount + 1 },
+                    ...queryHistory.val.filter(e => e.query !== trimmed),
+                ]
+            } else {
+                next = [
+                    { query: trimmed, lastUsedAt: now, useCount: 1 },
+                    ...queryHistory.val,
+                ]
+            }
+            if (next.length > HISTORY_MAX) next = next.slice(0, HISTORY_MAX)
+            queryHistory.val = next
+            saveStorage(HISTORY_KEY, next)
+        }
+
+        function toggleStarred(q) {
+            const trimmed = (q || '').trim()
+            if (!trimmed || trimmed === '*') return
+            const already = starredQueries.val.includes(trimmed)
+            let next
+            if (already) {
+                next = starredQueries.val.filter(s => s !== trimmed)
+            } else {
+                next = [trimmed, ...starredQueries.val]
+                if (next.length > STARRED_MAX) next = next.slice(0, STARRED_MAX)
+            }
+            starredQueries.val = next
+            saveStorage(STARRED_KEY, next)
+        }
 
         // ──────────────────────────────────────────
         // Helpers
@@ -539,6 +698,7 @@
         async function executeQuery() {
             const q = queryInputEl?.value?.trim() || ""
             query.val = q
+            historyNavIdx.val = -1
             searching.val = true
             statusText.val = ""
             emptyMessage.val = ""
@@ -562,6 +722,7 @@
                 totalCount.val = data.total
                 statusText.val = ""
                 emptyMessage.val = ""
+                saveHistoryEntry(q)
                 pruneLogsForSlidingWindow()
                 restartSlidingTimerIfNeeded()
 
@@ -701,6 +862,7 @@
             const v = value.includes(" ") ? `"${value}"` : value
             if (queryInputEl) {
                 queryInputEl.value = `${field}:${v}`
+                liveQuery.val = queryInputEl.value
                 updateHighlightGlobal()
             }
             executeQuery()
@@ -970,6 +1132,10 @@
             const completions  = van.state([])
             const selectedIdx  = van.state(-1)
             const showDropdown = van.state(false)
+            const showHistory  = van.state(false)
+            const showStarred  = van.state(false)
+
+            let savedInput = ''  // saved input value for Alt+↑/↓ navigation
 
             const hlDiv = document.createElement('div')
             hlDiv.className = 'search-highlight'
@@ -1000,14 +1166,65 @@
                 updateHighlight()
             }
 
+            function loadQuery(q) {
+                inp.value = q
+                liveQuery.val = q
+                updateHighlightGlobal()
+                showHistory.val = false
+                showStarred.val = false
+                executeQuery()
+            }
+
             const inp = input({
                 type: "text",
                 class: "search-editor-input",
                 placeholder: "Enter query (e.g., level:ERROR, service:api, message:*timeout*)",
                 autocomplete: "off",
-                oninput: () => { updateHighlight(); updateCompletions() },
+                oninput: () => { updateHighlight(); updateCompletions(); liveQuery.val = inp.value },
                 onscroll: () => { if (queryHighlightEl) queryHighlightEl.scrollLeft = inp.scrollLeft },
                 onkeydown: e => {
+                    // Alt shortcuts — highest priority, handled before autocomplete
+                    if (e.altKey) {
+                        if (e.key === 'ArrowUp') {
+                            e.preventDefault()
+                            const hist = queryHistory.val
+                            if (hist.length === 0) return
+                            if (historyNavIdx.val === -1) savedInput = inp.value
+                            const nextIdx = Math.min(historyNavIdx.val + 1, hist.length - 1)
+                            historyNavIdx.val = nextIdx
+                            inp.value = hist[nextIdx].query
+                            liveQuery.val = inp.value
+                            updateHighlight()
+                            return
+                        }
+                        if (e.key === 'ArrowDown') {
+                            e.preventDefault()
+                            if (historyNavIdx.val === -1) return
+                            if (historyNavIdx.val === 0) {
+                                historyNavIdx.val = -1
+                                inp.value = savedInput
+                                liveQuery.val = inp.value
+                                updateHighlight()
+                            } else {
+                                const nextIdx = historyNavIdx.val - 1
+                                historyNavIdx.val = nextIdx
+                                inp.value = queryHistory.val[nextIdx].query
+                                liveQuery.val = inp.value
+                                updateHighlight()
+                            }
+                            return
+                        }
+                        if (e.key.toLowerCase() === 's') {
+                            e.preventDefault()
+                            toggleStarred(inp.value)
+                            return
+                        }
+                        if (e.key.toLowerCase() === 'c') {
+                            e.preventDefault()
+                            navigator.clipboard?.writeText(inp.value.trim()).catch(() => {})
+                            return
+                        }
+                    }
                     const items = completions.val
                     if (showDropdown.val && items.length > 0) {
                         if (e.key === 'ArrowDown') {
@@ -1042,7 +1259,7 @@
             })
             queryInputEl = inp
 
-            // Rebuild dropdown items reactively
+            // Rebuild autocomplete dropdown items reactively
             van.derive(() => {
                 const items = completions.val
                 const sel   = selectedIdx.val
@@ -1057,6 +1274,126 @@
                 })
             })
 
+            // History panel
+            const histPanelEl = document.createElement('div')
+            histPanelEl.className = 'query-panel'
+            van.derive(() => {
+                const show  = showHistory.val
+                const items = queryHistory.val
+                histPanelEl.style.display = show ? 'block' : 'none'
+                histPanelEl.innerHTML = ''
+                if (!show) return
+                if (items.length === 0) {
+                    const empty = document.createElement('div')
+                    empty.className = 'query-panel-empty'
+                    empty.textContent = 'No history yet'
+                    histPanelEl.appendChild(empty)
+                    return
+                }
+                for (const item of items) {
+                    const row = document.createElement('div')
+                    row.className = 'query-panel-item'
+                    const text = document.createElement('span')
+                    text.className = 'qp-text'
+                    text.textContent = item.query
+                    text.title = item.query
+                    const copyBtn = document.createElement('button')
+                    copyBtn.className = 'qp-copy'
+                    copyBtn.textContent = '\u29c9'
+                    copyBtn.title = 'Copy query'
+                    copyBtn.addEventListener('mousedown', e => {
+                        e.stopPropagation()
+                        navigator.clipboard?.writeText(item.query).catch(() => {})
+                    })
+                    row.appendChild(text)
+                    row.appendChild(copyBtn)
+                    row.addEventListener('mousedown', e => {
+                        e.preventDefault()
+                        loadQuery(item.query)
+                    })
+                    histPanelEl.appendChild(row)
+                }
+            })
+
+            // Starred panel
+            const starredPanelEl = document.createElement('div')
+            starredPanelEl.className = 'query-panel'
+            van.derive(() => {
+                const show  = showStarred.val
+                const items = starredQueries.val
+                starredPanelEl.style.display = show ? 'block' : 'none'
+                starredPanelEl.innerHTML = ''
+                if (!show) return
+                if (items.length === 0) {
+                    const empty = document.createElement('div')
+                    empty.className = 'query-panel-empty'
+                    empty.textContent = 'No starred queries yet'
+                    starredPanelEl.appendChild(empty)
+                    return
+                }
+                for (const q of items) {
+                    const row = document.createElement('div')
+                    row.className = 'query-panel-item'
+                    const text = document.createElement('span')
+                    text.className = 'qp-text'
+                    text.textContent = q
+                    text.title = q
+                    const copyBtn = document.createElement('button')
+                    copyBtn.className = 'qp-copy'
+                    copyBtn.textContent = '\u29c9'
+                    copyBtn.title = 'Copy query'
+                    copyBtn.addEventListener('mousedown', e => {
+                        e.stopPropagation()
+                        navigator.clipboard?.writeText(q).catch(() => {})
+                    })
+                    row.appendChild(text)
+                    row.appendChild(copyBtn)
+                    row.addEventListener('mousedown', e => {
+                        e.preventDefault()
+                        loadQuery(q)
+                    })
+                    starredPanelEl.appendChild(row)
+                }
+            })
+
+            const histBtn = button({
+                class: 'query-panel-btn',
+                'data-testid': 'history-btn',
+                title: 'Query history (Alt+\u2191/\u2193)',
+                onclick: e => {
+                    e.stopPropagation()
+                    showHistory.val = !showHistory.val
+                    if (showHistory.val) showStarred.val = false
+                },
+            }, '\ud83d\udd50 History')
+
+            const starredBtn = button({
+                class: 'query-panel-btn',
+                'data-testid': 'starred-btn',
+                title: 'Starred queries',
+                onclick: e => {
+                    e.stopPropagation()
+                    showStarred.val = !showStarred.val
+                    if (showStarred.val) showHistory.val = false
+                },
+            }, '\u2605 Starred')
+
+            const starBtn = button({
+                class: () => 'star-btn' + (currentIsStarred.val ? ' starred' : ''),
+                'data-testid': 'star-btn',
+                title: 'Star/unstar current query (Alt+S)',
+                onclick: () => toggleStarred(inp.value),
+            }, () => currentIsStarred.val ? '\u2605' : '\u2606')
+
+            const histBtnWrapper   = div({class: 'query-panel-wrapper'}, histBtn, histPanelEl)
+            const starredBtnWrapper = div({class: 'query-panel-wrapper'}, starredBtn, starredPanelEl)
+
+            // Close panels when clicking outside their wrappers
+            document.addEventListener('mousedown', e => {
+                if (!histBtnWrapper.contains(e.target))   showHistory.val = false
+                if (!starredBtnWrapper.contains(e.target)) showStarred.val = false
+            })
+
             const wrapper = div({class: "search-editor"}, hlDiv, inp, dropdownEl)
 
             return hdr(
@@ -1064,8 +1401,11 @@
                 div({class: "search-bar"},
                     wrapper,
                     button({class: "clear-btn", title: "Clear search",
-                        onclick: () => { inp.value = ""; updateHighlight(); showDropdown.val = false; executeQuery() }
+                        onclick: () => { inp.value = ""; liveQuery.val = ""; updateHighlight(); showDropdown.val = false; executeQuery() }
                     }, "\u00D7"),
+                    starBtn,
+                    histBtnWrapper,
+                    starredBtnWrapper,
                     button({onclick: executeQuery}, "Search"),
                 ),
                 DateRangePicker(),
