@@ -197,3 +197,54 @@ export async function waitForHistoryEntry(page, query, predicate, { timeout = 5_
     return Boolean(entry && predicate(entry, history));
   }, { timeout }).toBe(true);
 }
+
+export async function waitForFields(page, { timeout = 10_000, interval = 200 } = {}) {
+  const deadline = Date.now() + timeout;
+  let lastError = null;
+  const fieldsURL = new URL('/fields', page.url()).toString();
+
+  while (Date.now() < deadline) {
+    try {
+      const resp = await page.request.get(fieldsURL);
+      if (!resp.ok()) throw new Error(`fields status ${resp.status()}`);
+      const data = await resp.json();
+      if (Array.isArray(data?.fields)) return data;
+      lastError = new Error('fields payload missing array');
+    } catch (err) {
+      lastError = err;
+    }
+    await delay(interval);
+  }
+
+  throw new Error(`Timed out waiting for /fields: ${lastError?.message || 'unknown error'}`);
+}
+
+export async function postJSON(page, path, payload) {
+  const url = new URL(path, page.url()).toString();
+  const resp = await page.request.post(url, { data: payload });
+  let body = null;
+  try {
+    body = await resp.json();
+  } catch {
+    body = null;
+  }
+  return { status: resp.status(), body };
+}
+
+export async function waitForQuery(page, payload, { timeout = 10_000, interval = 200 } = {}) {
+  const deadline = Date.now() + timeout;
+  let lastError = null;
+
+  while (Date.now() < deadline) {
+    try {
+      const result = await postJSON(page, '/query', payload);
+      if (result.status === 200 && result.body && Array.isArray(result.body.logs)) return result;
+      lastError = new Error(`query status ${result.status}`);
+    } catch (err) {
+      lastError = err;
+    }
+    await delay(interval);
+  }
+
+  throw new Error(`Timed out waiting for /query: ${lastError?.message || 'unknown error'}`);
+}

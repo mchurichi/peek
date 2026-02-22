@@ -50,39 +50,52 @@ test.describe('field-filter-append', () => {
     };
 
     const expandAndWait = async () => {
-      expect(await expandRow(page)).toBeTruthy();
-      await delay(800);
+      await expect.poll(async () => expandRow(page), {
+        timeout: 8_000,
+        intervals: [100, 200, 300, 500],
+      }).toBe(true);
+      await expect.poll(async () => page.evaluate(() =>
+        document.querySelectorAll('.field-val').length
+      ), {
+        timeout: 5_000,
+        intervals: [100, 200, 300],
+      }).toBeGreaterThan(0);
+    };
+
+    const expectQueryValue = async (value) => {
+      await expect.poll(async () => getQuery(), {
+        timeout: 5_000,
+        intervals: [100, 200, 300],
+      }).toBe(value);
     };
 
     await page.goto(baseURL);
-    await delay(2000);
+    await expect(page.locator('.search-editor-input')).toBeVisible();
 
-    const rowCount = await page.evaluate(() => document.querySelectorAll('.log-row').length);
-    expect(rowCount).toBeGreaterThanOrEqual(30);
+    await expect.poll(async () => page.evaluate(() => document.querySelectorAll('.log-row').length), {
+      timeout: 8_000,
+      intervals: [100, 200, 300, 500],
+    }).toBeGreaterThanOrEqual(30);
 
     await setQuery('level:INFO');
     await expandAndWait();
     expect(await clickFieldVal('api')).toBeTruthy();
-    await delay(600);
-    expect(await getQuery()).toBe('level:INFO AND service:"api"');
+    await expectQueryValue('level:INFO AND service:"api"');
 
     await setQuery('');
     await expandAndWait();
     expect(await clickFieldVal('api')).toBeTruthy();
-    await delay(600);
-    expect(await getQuery()).toBe('service:"api"');
+    await expectQueryValue('service:"api"');
 
     await setQuery('*');
     await expandAndWait();
     expect(await clickFieldVal('api')).toBeTruthy();
-    await delay(600);
-    expect(await getQuery()).toBe('service:"api"');
+    await expectQueryValue('service:"api"');
 
     await setQuery('level:INFO AND');
     await expandAndWait();
     expect(await clickFieldVal('api')).toBeTruthy();
-    await delay(600);
-    expect(await getQuery()).toBe('level:INFO AND service:"api"');
+    await expectQueryValue('level:INFO AND service:"api"');
 
     await setScroll(page, 300);
     await delay(200);
@@ -92,7 +105,6 @@ test.describe('field-filter-append', () => {
     await expandAndWait();
     const scrollAfterExpand = await getScroll(page);
     expect(await clickFieldVal('api')).toBeTruthy();
-    await delay(600);
 
     const scrollAfterClick = await getScroll(page);
     const drift = Math.abs(scrollAfterClick - scrollAfterExpand);

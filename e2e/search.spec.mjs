@@ -4,7 +4,7 @@
 
 import { test, expect } from '@playwright/test';
 import { setTimeout as delay } from 'timers/promises';
-import { portForTestFile, startServer, stopServer } from './helpers.mjs';
+import { portForTestFile, startServer, stopServer, waitForFields } from './helpers.mjs';
 
 let server;
 let baseURL;
@@ -22,9 +22,9 @@ test.describe('search', () => {
 
   test('supports field API, highlighting, autocomplete, and query errors', async ({ page }) => {
     await page.goto(baseURL);
-    await delay(1000);
-
-    const fieldsResp = await page.evaluate(() => fetch('/fields').then((r) => r.json()));
+    const searchInput = page.locator('.search-editor-input');
+    await expect(searchInput).toBeVisible();
+    const fieldsResp = await waitForFields(page);
     const fieldNames = (fieldsResp.fields || []).map((f) => f.name);
     expect(Array.isArray(fieldsResp.fields)).toBeTruthy();
     expect(fieldNames).toEqual(expect.arrayContaining(['service', 'user_id', 'request_id', 'level', 'message', 'timestamp']));
@@ -33,13 +33,10 @@ test.describe('search', () => {
     expect(Array.isArray(serviceField?.top_values)).toBeTruthy();
     expect(serviceField?.top_values).toContain('api');
 
-    await delay(2000);
     const hlExists = await page.evaluate(() => !!document.querySelector('.search-highlight'));
     const inputExists = await page.evaluate(() => !!document.querySelector('.search-editor-input'));
     expect(hlExists).toBeTruthy();
     expect(inputExists).toBeTruthy();
-
-    const searchInput = page.locator('.search-editor-input');
 
     await searchInput.fill('level:ERROR');
     await delay(100);
