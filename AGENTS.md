@@ -6,30 +6,31 @@ Minimalist CLI log collector and web UI. Single Go binary — reads structured l
 
 ```bash
 # Build
-go build -o peek ./cmd/peek
+mise exec -- go build -o peek ./cmd/peek
 
 # Collect mode (pipe stdin + web UI)
-cat app.log | go run ./cmd/peek --port 8080
+cat app.log | mise exec -- go run ./cmd/peek --port 8080
 
 # Server mode (browse stored logs)
-go run ./cmd/peek server
+mise exec -- go run ./cmd/peek server
 
 # E2E tests (requires Playwright)
-npm run test:e2e
+mise exec -- npm run test:e2e
 
 # Single E2E spec
-node e2e/table.spec.mjs
-node e2e/resize.spec.mjs
-node e2e/search.spec.mjs
-node e2e/search-caret.spec.mjs
-node e2e/sliding-window.spec.mjs
+mise exec -- node e2e/table.spec.mjs
+mise exec -- node e2e/resize.spec.mjs
+mise exec -- node e2e/search.spec.mjs
+mise exec -- node e2e/search-caret.spec.mjs
+mise exec -- node e2e/sliding-window.spec.mjs
+mise exec -- node e2e/field-filter-append.spec.mjs
 
 # Manual test log generation
-node e2e/loggen.mjs --count 200
-node e2e/loggen.mjs --follow --rate 20 | go run ./cmd/peek --all --no-browser
+mise exec -- node e2e/loggen.mjs --count 200
+mise exec -- bash -lc 'node e2e/loggen.mjs --follow --rate 20 | go run ./cmd/peek --all --no-browser'
 ```
 
-No linter or formatter is configured yet. Use `go vet ./...` for basic checks.
+No linter or formatter is configured yet. Use `mise exec -- go vet ./...` for basic checks.
 
 ## Project Structure
 
@@ -113,6 +114,7 @@ BadgerDB keys: `log:{timestamp_nano}:{id}` — enables time-range key seeking.
 - **Filter interface**: new query features must implement `Match(*LogEntry) bool`
 - **BadgerDB key format**: maintain `log:{timestamp_nano}:{id}` — time-range optimizations depend on it
 - **New UI features need E2E tests** following the existing Playwright pattern
+- **Run Go and test commands via mise**: use `mise exec -- ...` for `go`, `node`, and `npm` commands documented here
 - **Docs boundary**: `/README.md` is consumer-facing usage; `/docs/README.md` is technical/developer/testing guidance
 - **Technical utilities docs**: document tools like `e2e/loggen.mjs` in `/docs/README.md`, not `/README.md`
 - **Keep AGENTS.md up to date**: any change that alters build commands, project structure, dependencies, architecture, conventions, or critical rules documented here MUST include a corresponding update to this file in the same commit
