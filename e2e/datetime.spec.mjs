@@ -152,7 +152,7 @@ try {
 
     // Verify preset query sends start param
     let capturedBody = null;
-    await page.route('/query', async route => {
+    await page.route('**/query', async route => {
       capturedBody = JSON.parse(route.request().postData() || '{}');
       await route.continue();
     });
@@ -175,4 +175,3 @@ try {
   const code = printSummary();
   process.exit(code);
 }
-

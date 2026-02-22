@@ -82,6 +82,14 @@ Response:
 ### WS /logs
 WebSocket endpoint for real-time log streaming
 
+## Datetime Sliding Behavior
+
+- Relative presets (`15m`, `1h`, `6h`, `24h`, `7d`) use a single query/subscribe setup, then slide client-side.
+- Sliding is maintained by pruning stale rows in the UI every 1 second.
+- No periodic HTTP `/query` polling is used for sliding windows.
+- A 2-minute grace (`120000ms`) is applied before eviction to reduce drops caused by clock skew or late-arriving events.
+- Fixed presets (`all`, `today`, `yesterday`, `custom`) do not use sliding pruning.
+
 ## Performance
 
 - **Collect**: 1K+ logs/sec

@@ -22,6 +22,7 @@ node e2e/table.spec.mjs
 node e2e/resize.spec.mjs
 node e2e/search.spec.mjs
 node e2e/search-caret.spec.mjs
+node e2e/sliding-window.spec.mjs
 
 # Manual test log generation
 node e2e/loggen.mjs --count 200
@@ -47,6 +48,7 @@ e2e/table.spec.mjs         Table rendering, expand/collapse, pinned columns
 e2e/resize.spec.mjs        Column resize behavior
 e2e/search.spec.mjs        Search syntax highlighting and field autocompletion
 e2e/search-caret.spec.mjs  Search caret/overlay alignment
+e2e/sliding-window.spec.mjs Sliding time presets via client-side window pruning
 e2e/screenshot.mjs         Screenshot generator with realistic data
 e2e/loggen.mjs             Manual test-data log generator (json/logfmt/mixed)
 .github/workflows/ci.yml   CI pipeline (build, vet, unit tests, E2E tests)
@@ -91,6 +93,7 @@ BadgerDB keys: `log:{timestamp_nano}:{id}` — enables time-range key seeking.
 - Column resize: drag handles manipulate `gridTemplateColumns`
 - Search bar: transparent `<input>` over a syntax-highlight `<div>` (`.search-highlight`) for Lucene token coloring
 - Autocomplete dropdown (`.search-autocomplete`) populated from `/fields` API; dismiss with Escape, navigate with arrow keys, accept with Tab/Enter
+- Relative time presets (`15m`, `1h`, `6h`, `24h`, `7d`) slide client-side by pruning stale rows on a 1s timer (2m grace), without periodic `/query` polling
 
 ### E2E Tests
 - Raw Playwright scripts, no test runner
