@@ -40,15 +40,17 @@ async function clickFieldVal(page, value) {
 /** Read the current search input value. */
 async function getQuery(page) {
   return page.evaluate(() =>
-    document.querySelector('.search-input')?.value ?? ''
+    document.querySelector('.search-editor-input')?.value ?? ''
   );
 }
 
 /** Set the search input value directly and update highlight. */
 async function setQuery(page, q) {
   await page.evaluate((q) => {
-    const el = document.querySelector('.search-input');
-    if (el) el.value = q;
+    const el = document.querySelector('.search-editor-input');
+    if (!el) return;
+    el.value = q;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
   }, q);
 }
 
