@@ -126,6 +126,13 @@ func (s *BadgerStorage) Store(entry *LogEntry) error {
 
 // Query retrieves log entries based on filters
 func (s *BadgerStorage) Query(filter Filter, limit, offset int) ([]*LogEntry, int, error) {
+	return s.QueryWithTimeRange(filter, nil, limit, offset)
+}
+
+// QueryWithTimeRange retrieves log entries using key-prefix seeking for time bounds.
+// When tr is non-nil, iteration starts at tr.Start and stops after tr.End,
+// avoiding a full scan of the log keyspace.
+func (s *BadgerStorage) QueryWithTimeRange(filter Filter, tr *TimeRange, limit, offset int) ([]*LogEntry, int, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -141,8 +148,32 @@ func (s *BadgerStorage) Query(filter Filter, limit, offset int) ([]*LogEntry, in
 
 		prefix := []byte(logPrefix)
 
-		// Iterate forward through all log entries
-		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+		// Seek directly to the start of the requested time range when provided.
+		var seekKey []byte
+		if tr != nil && !tr.Start.IsZero() {
+			seekKey = []byte(fmt.Sprintf("%s%d:", logPrefix, tr.Start.UnixNano()))
+		} else {
+			seekKey = prefix
+		}
+
+		endNano := int64(0)
+		if tr != nil && !tr.End.IsZero() {
+			endNano = tr.End.UnixNano()
+		}
+
+		for it.Seek(seekKey); it.ValidForPrefix(prefix); it.Next() {
+			// Early exit when entry exceeds end time.
+			if endNano > 0 {
+				key := string(it.Item().Key())
+				parts := strings.SplitN(key[len(logPrefix):], ":", 2)
+				if len(parts) >= 1 {
+					var ts int64
+					if _, err := fmt.Sscanf(parts[0], "%d", &ts); err == nil && ts > endNano {
+						break
+					}
+				}
+			}
+
 			item := it.Item()
 			err := item.Value(func(val []byte) error {
 				entry, err := FromJSON(val)
@@ -179,8 +210,6 @@ func (s *BadgerStorage) Query(filter Filter, limit, offset int) ([]*LogEntry, in
 
 	return entries, total, err
 }
-
-// GetStats returns storage statistics
 func (s *BadgerStorage) GetStats() (Stats, error) {
 	// Copy DB pointer under lock, then release so stats scan doesn't block writers.
 	s.mu.RLock()

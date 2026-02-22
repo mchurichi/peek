@@ -125,13 +125,20 @@ try {
   console.log('\n7️⃣  Sticky header');
   await setScroll(page, 999_999);
   await setTimeout(300);
-  const headerVisible = await page.evaluate(() => {
+  const stickyMetrics = await page.evaluate(() => {
     const h = document.querySelector('.log-table-header');
-    if (!h) return false;
+    const c = document.querySelector('.log-container');
+    if (!h || !c) return null;
     const r = h.getBoundingClientRect();
-    return r.top >= 0 && r.top < 200;
+    const cr = c.getBoundingClientRect();
+    return { headerTop: r.top, containerTop: cr.top };
   });
-  assert('Header stays visible at bottom', headerVisible);
+  const headerVisible = !!stickyMetrics && Math.abs(stickyMetrics.headerTop - stickyMetrics.containerTop) <= 3;
+  assert(
+    'Header stays visible at bottom',
+    headerVisible,
+    stickyMetrics ? `headerTop ${stickyMetrics.headerTop.toFixed(1)} vs containerTop ${stickyMetrics.containerTop.toFixed(1)}` : 'missing elements',
+  );
 
   // ── Summary ─────────────────────────────────────
   await page.screenshot({ path: '/tmp/peek-test-table.png', fullPage: false });

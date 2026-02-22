@@ -556,10 +556,50 @@ func TestParseTimeValue(t *testing.T) {
 			},
 		},
 		{
+			name: "now-7d",
+			val:  "now-7d",
+			want: func(t time.Time) bool {
+				expected := now.Add(-7 * 24 * time.Hour)
+				return t.After(expected.Add(-time.Second)) && t.Before(expected.Add(time.Second))
+			},
+		},
+		{
+			name: "now-2w",
+			val:  "now-2w",
+			want: func(t time.Time) bool {
+				expected := now.Add(-14 * 24 * time.Hour)
+				return t.After(expected.Add(-time.Second)) && t.Before(expected.Add(time.Second))
+			},
+		},
+		{
 			name: "absolute RFC3339",
 			val:  "2024-01-15T10:30:00Z",
 			want: func(t time.Time) bool {
 				expected := time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC)
+				return t.Equal(expected)
+			},
+		},
+		{
+			name: "datetime without timezone",
+			val:  "2026-02-01T10:00:00",
+			want: func(t time.Time) bool {
+				expected := time.Date(2026, 2, 1, 10, 0, 0, 0, time.UTC)
+				return t.Equal(expected)
+			},
+		},
+		{
+			name: "date-only string",
+			val:  "2026-02-01",
+			want: func(t time.Time) bool {
+				expected := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+				return t.Equal(expected)
+			},
+		},
+		{
+			name: "epoch milliseconds",
+			val:  "1740000000000",
+			want: func(t time.Time) bool {
+				expected := time.Unix(0, 1740000000000*int64(time.Millisecond)).UTC()
 				return t.Equal(expected)
 			},
 		},
