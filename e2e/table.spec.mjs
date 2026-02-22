@@ -1,164 +1,110 @@
-#!/usr/bin/env node
 /**
- * table.spec.mjs — Core table behaviour
- *
- * Covers: row rendering, expand/collapse with scroll preservation,
- * adding/removing pinned columns, empty cell rendering, resize handles,
- * and sticky header.
+ * table.spec.mjs — Core table behaviour.
  */
 
-import { chromium } from 'playwright';
-import { setTimeout } from 'timers/promises';
+import { test, expect } from '@playwright/test';
+import { setTimeout as delay } from 'timers/promises';
 import {
-  assert, printSummary,
-  startServer, getScroll, setScroll,
-  clickFieldKey, expandRow, expandCollapsedRow, getHeaders,
+  clickFieldKey,
+  expandCollapsedRow,
+  expandRow,
+  getHeaders,
+  getScroll,
+  portForTestFile,
+  setScroll,
+  startServer,
+  stopServer,
 } from './helpers.mjs';
 
-const PORT = 9997;
-const BASE_URL = `http://localhost:${PORT}`;
+let server;
+let baseURL;
 
-let server = null;
-let browser = null;
-
-async function cleanup() {
-  if (browser) await browser.close().catch(() => {});
-  if (server) server.kill();
-}
-process.on('SIGINT', cleanup);
-
-try {
-  // ── Setup ────────────────────────────────────────
-  console.log('⏳ Starting peek server (go run)…');
-  server = await startServer(PORT);
-  console.log('✅ Server ready');
-
-  const headless = !!(process.env.CI || process.env.HEADLESS);
-  browser = await chromium.launch({ headless, ...(headless ? {} : { slowMo: 80 }) });
-  const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
-  const page = await ctx.newPage();
-  page.on('pageerror', err => console.error('  PAGE ERROR:', err.message));
-
-  await page.goto(BASE_URL);
-  await setTimeout(2000); // let VanJS render + observer init
-
-  // ── 1. Table renders rows ───────────────────────
-  console.log('\n1️⃣  Table renders rows');
-  const rowCount = await page.evaluate(() =>
-    document.querySelectorAll('.log-row').length
-  );
-  assert('Has log rows', rowCount >= 30, `${rowCount} rows`);
-
-  const headers = await getHeaders(page);
-  assert(
-    'Default headers: time, level, message',
-    headers.length === 3 && headers.includes('time') && headers.includes('level') && headers.includes('message'),
-  );
-
-  // ── 2. Expand row preserves scroll ──────────────
-  console.log('\n2️⃣  Expand row preserves scroll');
-  await setScroll(page, 400);
-  const scrollBefore = await getScroll(page);
-  assert('Scrolled to target', scrollBefore > 100, `${scrollBefore}px`);
-
-  // Store scroll in window property so the app can restore it
-  await page.evaluate(s => { window.scrollPreserveValue = s; }, scrollBefore);
-  await expandRow(page);
-  await setTimeout(800);
-
-  const scrollAfterExpand = await getScroll(page);
-  const expandDrift = Math.abs(scrollAfterExpand - scrollBefore);
-  assert('Scroll preserved after expand', expandDrift <= 30, `drift ${expandDrift}px`);
-
-  const detailVisible = await page.evaluate(() =>
-    document.querySelectorAll('.detail-row.visible').length > 0
-  );
-  assert('Detail row is visible', detailVisible);
-
-  // ── 3. Add column "service" ─────────────────────
-  console.log('\n3️⃣  Add column "service"');
-  const scrollBeforeCol = await getScroll(page);
-
-  const clicked = await clickFieldKey(page, 'service');
-  assert('Clicked service field', clicked);
-  await setTimeout(800);
-
-  const headersAfter = await getHeaders(page);
-  assert('Header includes "service"', headersAfter.includes('service'), headersAfter.join(', '));
-
-  const pinnedCount = await page.evaluate(() =>
-    document.querySelectorAll('.pinned-val').length
-  );
-  assert('Pinned value cells exist', pinnedCount >= 30, `${pinnedCount} cells`);
-
-  const colDrift = Math.abs((await getScroll(page)) - scrollBeforeCol);
-  assert('Scroll stable after add column', colDrift <= 50, `drift ${colDrift}px`);
-
-  // ── 4. Add second column "user_id" ──────────────
-  console.log('\n4️⃣  Add column "user_id"');
-  await expandCollapsedRow(page);
-  await setTimeout(500);
-
-  const clicked2 = await clickFieldKey(page, 'user_id');
-  assert('Clicked user_id field', clicked2);
-  await setTimeout(800);
-
-  const headers2 = await getHeaders(page);
-  assert('Header includes "user_id"', headers2.includes('user_id'), headers2.join(', '));
-
-  // ── 5. No "-" in empty cells ────────────────────
-  console.log('\n5️⃣  Empty cell rendering');
-  const hasDash = await page.evaluate(() =>
-    Array.from(document.querySelectorAll('.pinned-val'))
-      .some(c => c.textContent.trim() === '-')
-  );
-  assert('No "-" in pinned cells', !hasDash);
-
-  // ── 6. Resize handles exist ─────────────────────
-  console.log('\n6️⃣  Column resize');
-  const handles = await page.evaluate(() =>
-    document.querySelectorAll('.resize-handle').length
-  );
-  assert('Resize handles present', handles > 0, `${handles} handles`);
-
-  // ── 7. Sticky header ───────────────────────────
-  console.log('\n7️⃣  Sticky header');
-  await setScroll(page, 999_999);
-  await setTimeout(300);
-  const stickyMetrics = await page.evaluate(() => {
-    const h = document.querySelector('.log-table-header');
-    const c = document.querySelector('.log-container');
-    if (!h || !c) return null;
-    const r = h.getBoundingClientRect();
-    const cr = c.getBoundingClientRect();
-    return { headerTop: r.top, containerTop: cr.top };
+test.describe('table', () => {
+  test.beforeAll(async ({}, workerInfo) => {
+    const port = portForTestFile(workerInfo);
+    server = await startServer(port);
+    baseURL = `http://localhost:${port}`;
   });
-  const headerVisible = !!stickyMetrics && Math.abs(stickyMetrics.headerTop - stickyMetrics.containerTop) <= 3;
-  assert(
-    'Header stays visible at bottom',
-    headerVisible,
-    stickyMetrics ? `headerTop ${stickyMetrics.headerTop.toFixed(1)} vs containerTop ${stickyMetrics.containerTop.toFixed(1)}` : 'missing elements',
-  );
 
-  // ── Summary ─────────────────────────────────────
-  await page.screenshot({ path: '/tmp/peek-test-table.png', fullPage: false });
-  console.log('\n📸 Screenshot: /tmp/peek-test-table.png');
+  test.afterAll(async () => {
+    await stopServer(server);
+  });
 
-  const exitCode = printSummary();
+  test('renders rows and preserves scroll on row/column changes', async ({ page }) => {
+    await page.goto(baseURL);
+    await delay(2000);
 
-  if (exitCode > 0) {
-    console.log('\n🔴 Some tests failed. Browser open 15s…');
-    await setTimeout(15_000);
-  } else {
-    console.log('\n🟢 All tests passed!');
-    await setTimeout(3_000);
-  }
+    const rowCount = await page.evaluate(() => document.querySelectorAll('.log-row').length);
+    expect(rowCount).toBeGreaterThanOrEqual(30);
 
-  process.exit(exitCode);
+    const headers = await getHeaders(page);
+    expect(headers.length).toBe(3);
+    expect(headers).toEqual(expect.arrayContaining(['time', 'level', 'message']));
 
-} catch (error) {
-  console.error('❌ Error:', error);
-  process.exit(1);
-} finally {
-  await cleanup();
-}
+    await setScroll(page, 400);
+    const scrollBefore = await getScroll(page);
+    expect(scrollBefore).toBeGreaterThan(100);
+
+    await page.evaluate((s) => { window.scrollPreserveValue = s; }, scrollBefore);
+    expect(await expandRow(page)).toBeTruthy();
+    await delay(800);
+
+    const scrollAfterExpand = await getScroll(page);
+    const expandDrift = Math.abs(scrollAfterExpand - scrollBefore);
+    expect(expandDrift).toBeLessThanOrEqual(30);
+
+    const detailVisible = await page.evaluate(() =>
+      document.querySelectorAll('.detail-row.visible').length > 0
+    );
+    expect(detailVisible).toBeTruthy();
+
+    const scrollBeforeCol = await getScroll(page);
+    expect(await clickFieldKey(page, 'service')).toBeTruthy();
+    await delay(800);
+
+    const headersAfter = await getHeaders(page);
+    expect(headersAfter).toContain('service');
+
+    const pinnedCount = await page.evaluate(() =>
+      document.querySelectorAll('.pinned-val').length
+    );
+    expect(pinnedCount).toBeGreaterThanOrEqual(30);
+
+    const colDrift = Math.abs((await getScroll(page)) - scrollBeforeCol);
+    expect(colDrift).toBeLessThanOrEqual(50);
+
+    await expandCollapsedRow(page);
+    await delay(500);
+    expect(await clickFieldKey(page, 'user_id')).toBeTruthy();
+    await delay(800);
+
+    const headers2 = await getHeaders(page);
+    expect(headers2).toContain('user_id');
+
+    const hasDash = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('.pinned-val'))
+        .some((c) => c.textContent.trim() === '-')
+    );
+    expect(hasDash).toBeFalsy();
+
+    const handles = await page.evaluate(() =>
+      document.querySelectorAll('.resize-handle').length
+    );
+    expect(handles).toBeGreaterThan(0);
+
+    await setScroll(page, 999_999);
+    await delay(300);
+    const stickyMetrics = await page.evaluate(() => {
+      const h = document.querySelector('.log-table-header');
+      const c = document.querySelector('.log-container');
+      if (!h || !c) return null;
+      const r = h.getBoundingClientRect();
+      const cr = c.getBoundingClientRect();
+      return { headerTop: r.top, containerTop: cr.top };
+    });
+
+    expect(stickyMetrics).not.toBeNull();
+    const drift = Math.abs(stickyMetrics.headerTop - stickyMetrics.containerTop);
+    expect(drift).toBeLessThanOrEqual(3);
+  });
+});

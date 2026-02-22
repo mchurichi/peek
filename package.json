@@ -3,9 +3,11 @@
     "logs:gen": "node e2e/loggen.mjs",
     "logs:gen:demo": "node e2e/loggen.mjs --count 500 --format mixed",
     "logs:gen:stream": "node e2e/loggen.mjs --follow --rate 20 --format mixed",
-    "test:e2e": "./e2e/run.sh"
+    "test:e2e": "./e2e/run.sh",
+    "test:e2e:pw": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "playwright": "^1.58.2"
   }
 }

@@ -1,78 +1,105 @@
 /**
- * Shared test helpers for peek e2e tests.
- *
- * Provides server lifecycle, common assertions, and DOM utilities
- * so individual spec files stay focused on behavior.
+ * Shared test helpers for Playwright Test based e2e tests.
  */
 
 import { spawn } from 'child_process';
-import { setTimeout } from 'timers/promises';
-import { dirname, resolve } from 'path';
+import { once } from 'events';
+import { setTimeout as delay } from 'timers/promises';
+import { basename, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
+import { expect } from '@playwright/test';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '..');
 
-// ── Test runner state ────────────────────────────
-
-let _passed = 0;
-let _failed = 0;
-
-export function assert(label, condition, detail = '') {
-  if (condition) {
-    console.log(`  ✅ ${label}${detail ? ` (${detail})` : ''}`);
-    _passed++;
-  } else {
-    console.log(`  ❌ ${label}${detail ? ` (${detail})` : ''}`);
-    _failed++;
-  }
-}
-
-export function results() {
-  return { passed: _passed, failed: _failed };
-}
-
-export function resetCounters() {
-  _passed = 0;
-  _failed = 0;
-}
-
-// ── Server lifecycle ─────────────────────────────
-
-const DEFAULT_PORT = 9997;
 const STARTUP_TIMEOUT_MS = 30_000;
 const POLL_INTERVAL_MS = 1_000;
+const FILE_PORT_OFFSETS = Object.freeze({
+  'datetime.spec.mjs': 0,
+  'field-filter-append.spec.mjs': 1,
+  'levelless.spec.mjs': 2,
+  'resize.spec.mjs': 3,
+  'search-caret.spec.mjs': 4,
+  'search.spec.mjs': 5,
+  'sliding-window.spec.mjs': 6,
+  'table.spec.mjs': 7,
+});
 
-/**
- * Start peek with piped test data and wait until it responds on `port`.
- * Returns the child process handle.
- */
-export async function startServer(port = DEFAULT_PORT, { rows = 40 } = {}) {
+function hashOffset(fileName) {
+  let h = 0;
+  for (const ch of fileName) {
+    h = (h * 31 + ch.charCodeAt(0)) % 90;
+  }
+  return h;
+}
+
+export function portForTestFile(testInfo) {
+  const basePort = Number(process.env.PEEK_E2E_BASE_PORT || 9997);
+  const workerIndex = testInfo?.workerIndex ?? 0;
+  const fileName = basename(testInfo?.file || 'unknown.spec.mjs');
+  const fileOffset = FILE_PORT_OFFSETS[fileName] ?? hashOffset(fileName);
+  return basePort + workerIndex * 100 + fileOffset;
+}
+
+export async function startServer(port, { rows = 40, lines = null } = {}) {
   const testDbPath = `/tmp/peek-e2e-test-${port}`;
-  const cmd = `
-    rm -rf ${testDbPath} && \
-    go build -o /tmp/peek-e2e-bin ./cmd/peek && \
-    for i in $(seq 1 ${rows}); do
+  const testBinPath = `/tmp/peek-e2e-bin-${port}`;
+  const testLogPath = `/tmp/peek-e2e-${port}.log`;
+
+  let inputCmd = '';
+  if (Array.isArray(lines)) {
+    const payload = Buffer.from(lines.join('\n'), 'utf8').toString('base64');
+    inputCmd = `printf %s '${payload}' | base64 --decode`;
+  } else {
+    inputCmd = `for i in $(seq 1 ${rows}); do
       printf '{"level":"INFO","msg":"Message %d","time":"2026-02-18T10:%02d:00Z","service":"api","user_id":"user%d","request_id":"req-%d"}\\n' "$i" "$i" "$i" "$i"
-    done | /tmp/peek-e2e-bin --port ${port} --no-browser --db-path ${testDbPath} --all --retention-days 0 --retention-size 10GB > /tmp/peek-e2e-${port}.log 2>&1
+    done`;
+  }
+
+  const cmd = `
+    rm -rf ${testDbPath} ${testBinPath} ${testLogPath} && \
+    (command -v go >/dev/null 2>&1 && go build -o ${testBinPath} ./cmd/peek || mise exec -- go build -o ${testBinPath} ./cmd/peek) && \
+    ${inputCmd} | ${testBinPath} --port ${port} --no-browser --db-path ${testDbPath} --all --retention-days 0 --retention-size 10GB > ${testLogPath} 2>&1
   `;
+
   const proc = spawn('sh', ['-c', cmd], { cwd: PROJECT_ROOT });
 
-  // Poll until the HTTP server is ready
   const deadline = Date.now() + STARTUP_TIMEOUT_MS;
   while (Date.now() < deadline) {
     try {
-      const resp = await fetch(`http://localhost:${port}`);
-      if (resp.ok) return proc;
-    } catch { /* not ready yet */ }
-    await setTimeout(POLL_INTERVAL_MS);
+      const resp = await fetch(`http://localhost:${port}/health`);
+      if (resp.ok) {
+        return proc;
+      }
+    } catch {
+      // Server not ready yet.
+    }
+    await delay(POLL_INTERVAL_MS);
   }
 
-  proc.kill();
-  throw new Error(`peek server did not start within ${STARTUP_TIMEOUT_MS / 1000}s`);
+  await stopServer(proc);
+  throw new Error(`peek server on port ${port} did not start within ${STARTUP_TIMEOUT_MS / 1000}s`);
 }
 
-// ── DOM helpers ──────────────────────────────────
+export async function stopServer(proc) {
+  if (!proc || proc.exitCode !== null) {
+    return;
+  }
+
+  proc.kill('SIGTERM');
+  await Promise.race([
+    once(proc, 'exit').catch(() => {}),
+    delay(1_000),
+  ]);
+
+  if (proc.exitCode === null) {
+    proc.kill('SIGKILL');
+    await Promise.race([
+      once(proc, 'exit').catch(() => {}),
+      delay(1_000),
+    ]);
+  }
+}
 
 /** Read scrollTop of the log container. */
 export async function getScroll(page) {
@@ -87,7 +114,7 @@ export async function setScroll(page, pos) {
     const c = document.querySelector('.log-container');
     if (c) c.scrollTop = p;
   }, pos);
-  await setTimeout(200);
+  await delay(200);
 }
 
 /**
@@ -97,7 +124,7 @@ export async function setScroll(page, pos) {
 export async function clickFieldKey(page, name) {
   return page.evaluate((n) => {
     const el = Array.from(document.querySelectorAll('.field-key'))
-      .find(e => e.textContent.trim() === n);
+      .find((e) => e.textContent.trim() === n);
     if (!el) return false;
     el.click();
     return true;
@@ -148,21 +175,25 @@ export async function expandCollapsedRow(page) {
 export async function getHeaders(page) {
   return page.evaluate(() =>
     Array.from(document.querySelectorAll('.log-table-header > div'))
-      .map(d => d.textContent.replace(/[✕×]/g, '').trim())
-      .filter(t => t.length > 0)
+      .map((d) => d.textContent.replace(/[✕×]/g, '').trim())
+      .filter((t) => t.length > 0)
   );
 }
 
-// ── Report / exit ────────────────────────────────
+export async function readJSONLocalStorage(page, key, fallback = []) {
+  return page.evaluate(([storageKey, defaultValue]) => {
+    try {
+      return JSON.parse(localStorage.getItem(storageKey) || JSON.stringify(defaultValue));
+    } catch {
+      return defaultValue;
+    }
+  }, [key, fallback]);
+}
 
-/**
- * Print final results and return the exit code.
- * Call this at the end of a spec's `finally` block.
- */
-export function printSummary() {
-  const { passed, failed } = results();
-  console.log(`\n${'═'.repeat(40)}`);
-  console.log(`Results: ${passed} passed, ${failed} failed`);
-  console.log(`${'═'.repeat(40)}`);
-  return failed > 0 ? 1 : 0;
+export async function waitForHistoryEntry(page, query, predicate, { timeout = 5_000 } = {}) {
+  await expect.poll(async () => {
+    const history = await readJSONLocalStorage(page, 'peek.queryHistory.v1', []);
+    const entry = history.find((item) => item.query === query);
+    return Boolean(entry && predicate(entry, history));
+  }, { timeout }).toBe(true);
 }
