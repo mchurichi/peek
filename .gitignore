@@ -33,3 +33,6 @@ Thumbs.db
 # Peek specific
 .peek/
 *.db
+
+# Test files
+test-results/

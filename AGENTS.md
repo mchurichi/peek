@@ -16,15 +16,16 @@ mise exec -- go run ./cmd/peek server
 
 # E2E tests (requires Playwright)
 mise exec -- npm run test:e2e
+mise exec -- ./e2e/run.sh --headless --parallel 3
 
 # Single E2E spec
-mise exec -- node e2e/table.spec.mjs
-mise exec -- node e2e/resize.spec.mjs
-mise exec -- node e2e/search.spec.mjs
-mise exec -- node e2e/search-caret.spec.mjs
-mise exec -- node e2e/sliding-window.spec.mjs
-mise exec -- node e2e/field-filter-append.spec.mjs
-mise exec -- node e2e/query-history.spec.mjs
+mise exec -- npx playwright test e2e/table.spec.mjs
+mise exec -- npx playwright test e2e/resize.spec.mjs
+mise exec -- npx playwright test e2e/search.spec.mjs
+mise exec -- npx playwright test e2e/search-caret.spec.mjs
+mise exec -- npx playwright test e2e/sliding-window.spec.mjs
+mise exec -- npx playwright test e2e/field-filter-append.spec.mjs
+mise exec -- npx playwright test e2e/query-history.spec.mjs
 
 # Manual test log generation
 mise exec -- node e2e/loggen.mjs --count 200
@@ -45,7 +46,9 @@ pkg/storage/badger.go      BadgerDB: Store, Query, Scan, GetFields, retention
 pkg/query/lucene.go        Lucene query parser (AND/OR/NOT, field:value, wildcards, ranges)
 pkg/server/server.go       HTTP server, /query, /fields, WebSocket /logs, broadcast
 pkg/server/index.html      Web UI (embedded via //go:embed)
-e2e/helpers.mjs            Shared Playwright helpers
+playwright.config.mjs      Playwright Test runner config (Chromium, retries, artifacts)
+e2e/run.sh                 Compatibility wrapper for Playwright Test invocations
+e2e/helpers.mjs            Shared E2E helpers (server lifecycle, deterministic ports, DOM utils)
 e2e/table.spec.mjs         Table rendering, expand/collapse, pinned columns
 e2e/resize.spec.mjs        Column resize behavior
 e2e/search.spec.mjs        Search syntax highlighting and field autocompletion
@@ -62,7 +65,7 @@ e2e/loggen.mjs             Manual test-data log generator (json/logfmt/mixed)
 
 - Go, BadgerDB, Gorilla WebSocket, BurntSushi/toml
 - Frontend: VanJS from CDN (~1KB), no build step
-- E2E: Playwright (Node.js)
+- E2E: `@playwright/test` runner + `playwright` (Node.js)
 
 ## Architecture
 
@@ -100,10 +103,11 @@ BadgerDB keys: `log:{timestamp_nano}:{id}` — enables time-range key seeking.
 - Relative time presets (`15m`, `1h`, `6h`, `24h`, `7d`) slide client-side by pruning stale rows on a 1s timer (2m grace), without periodic `/query` polling
 
 ### E2E Tests
-- Raw Playwright scripts, no test runner
-- Pattern: `startServer()` → launch Chromium → assertions → `printSummary()` → exit code
-- Custom `assert(label, condition, detail)` helper
-- Test port: `9997`
+- Playwright Test runner (`@playwright/test`) with Chromium project
+- Pattern: per-spec `beforeAll/afterAll` starts/stops isolated peek server and runs assertions with `expect`
+- Wrapper script: `e2e/run.sh` delegates to `npx playwright test`
+- Default base test port: `9997` (override with `PEEK_E2E_BASE_PORT`)
+- Deterministic port formula: `base + workerIndex*100 + fileOffset`
 - Screenshots: `/tmp/peek-test-*.png`
 
 ## Critical Rules
