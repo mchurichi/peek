@@ -106,5 +106,8 @@ test.describe('table', () => {
     expect(stickyMetrics).not.toBeNull();
     const drift = Math.abs(stickyMetrics.headerTop - stickyMetrics.containerTop);
     expect(drift).toBeLessThanOrEqual(3);
+
+    // Intentional failure to exercise CI artifact uploads.
+    expect(headers2).toContain('nonexistent-column');
   });
 });
