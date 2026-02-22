@@ -24,6 +24,7 @@ mise exec -- node e2e/search.spec.mjs
 mise exec -- node e2e/search-caret.spec.mjs
 mise exec -- node e2e/sliding-window.spec.mjs
 mise exec -- node e2e/field-filter-append.spec.mjs
+mise exec -- node e2e/query-history.spec.mjs
 
 # Manual test log generation
 mise exec -- node e2e/loggen.mjs --count 200
@@ -51,6 +52,7 @@ e2e/search.spec.mjs        Search syntax highlighting and field autocompletion
 e2e/search-caret.spec.mjs  Search caret/overlay alignment
 e2e/sliding-window.spec.mjs Sliding time presets via client-side window pruning
 e2e/field-filter-append.spec.mjs Field-value click appends safe Lucene token to query
+e2e/query-history.spec.mjs Query history and starred queries (localStorage, shortcuts, dropdowns)
 e2e/screenshot.mjs         Screenshot generator with realistic data
 e2e/loggen.mjs             Manual test-data log generator (json/logfmt/mixed)
 .github/workflows/ci.yml   CI pipeline (build, vet, unit tests, E2E tests)
