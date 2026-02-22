@@ -286,7 +286,7 @@ message:*timeout*              # Wildcard search
 
 ### Requirements
 
-- Go 1.21+
+- Go 1.24+
 - BadgerDB v4
 - Gorilla WebSocket
 
@@ -305,10 +305,9 @@ peek/
 │   ├── parser/         # Log format parsers
 │   ├── storage/        # BadgerDB storage layer
 │   ├── query/          # Lucene query engine
-│   └── server/         # HTTP server & WebSocket
+│   └── server/         # HTTP server, WebSocket, embedded UI (index.html)
 ├── internal/
-│   ├── config/         # Configuration management
-│   └── web/            # Web UI (embedded)
+│   └── config/         # Configuration management
 └── go.mod
 ```
 

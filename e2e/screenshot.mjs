@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * screenshot.mjs — Generate a screenshot of peek with realistic data and a Lucene query.
+ * screenshot.mjs — Generate a deterministic screenshot of peek with realistic data.
  *
- * Usage: node e2e/screenshot.mjs [--output path/to/screenshot.png]
+ * Usage: mise exec -- node e2e/screenshot.mjs [--output path/to/screenshot.png]
  */
 
 import { chromium } from 'playwright';
@@ -10,6 +10,7 @@ import { spawn } from 'child_process';
 import { setTimeout } from 'timers/promises';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
+import { rmSync } from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '..');
@@ -17,6 +18,10 @@ const PORT = 9996;
 const OUTPUT = process.argv.includes('--output')
   ? process.argv[process.argv.indexOf('--output') + 1]
   : resolve(PROJECT_ROOT, 'docs', 'screenshot.png');
+const RUN_ID = `${Date.now()}-${process.pid}`;
+const DB_PATH = `/tmp/peek-screenshot-db-${RUN_ID}`;
+const BIN_PATH = `/tmp/peek-screenshot-bin-${RUN_ID}`;
+const STARTUP_TIMEOUT_MS = 30_000;
 
 // Realistic microservice log lines
 const logs = [
@@ -60,46 +65,123 @@ const logs = [
 let server = null;
 let browser = null;
 
+async function waitForServerReady() {
+  const deadline = Date.now() + STARTUP_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    try {
+      const resp = await fetch(`http://localhost:${PORT}/health`);
+      if (resp.ok) return;
+    } catch {
+      // Server not ready yet.
+    }
+    await setTimeout(250);
+  }
+  throw new Error(`peek server on port ${PORT} did not start within ${STARTUP_TIMEOUT_MS / 1000}s`);
+}
+
+async function waitForQueryCount(expectedMinimum = 1) {
+  const deadline = Date.now() + STARTUP_TIMEOUT_MS;
+  const body = {
+    query: '*',
+    limit: 500,
+    offset: 0,
+  };
+
+  while (Date.now() < deadline) {
+    try {
+      const resp = await fetch(`http://localhost:${PORT}/query`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        const total = Number(data?.total || 0);
+        if (total >= expectedMinimum) return;
+      }
+    } catch {
+      // Query API not ready yet.
+    }
+    await setTimeout(250);
+  }
+  throw new Error(`timed out waiting for at least ${expectedMinimum} indexed logs`);
+}
+
+async function waitForExit(proc, timeoutMs = 5_000) {
+  if (!proc || proc.exitCode !== null) return;
+  await Promise.race([
+    new Promise((resolveExit) => proc.once('exit', resolveExit)),
+    setTimeout(timeoutMs),
+  ]);
+}
+
 async function cleanup() {
   if (browser) await browser.close().catch(() => {});
-  if (server) server.kill();
+  if (server && server.exitCode === null) {
+    server.kill('SIGTERM');
+    await waitForExit(server, 1_500);
+    if (server.exitCode === null) {
+      server.kill('SIGKILL');
+      await waitForExit(server, 1_500);
+    }
+  }
+  rmSync(DB_PATH, { recursive: true, force: true });
+  rmSync(BIN_PATH, { force: true });
 }
 process.on('SIGINT', cleanup);
+process.on('SIGTERM', cleanup);
 
 try {
-  console.log('⏳ Starting peek with realistic log data…');
+  rmSync(DB_PATH, { recursive: true, force: true });
+  rmSync(BIN_PATH, { force: true });
 
-  const jsonLines = logs.map(l => JSON.stringify(l)).join('\n');
-  server = spawn('sh', ['-c', `echo '${jsonLines.replace(/'/g, "\\'")}' | go run ./cmd/peek --port ${PORT} --no-browser`], {
+  console.log('Building peek binary...');
+  await new Promise((resolveBuild, rejectBuild) => {
+    const build = spawn('mise', ['exec', '--', 'go', 'build', '-o', BIN_PATH, './cmd/peek'], {
+      cwd: PROJECT_ROOT,
+      stdio: 'inherit',
+    });
+    build.once('error', rejectBuild);
+    build.once('exit', (code) => {
+      if (code === 0) resolveBuild();
+      else rejectBuild(new Error(`go build failed with exit code ${code}`));
+    });
+  });
+
+  console.log('Starting peek server with isolated db...');
+  server = spawn(BIN_PATH, ['--port', String(PORT), '--no-browser', '--db-path', DB_PATH, '--all'], {
     cwd: PROJECT_ROOT,
     stdio: ['pipe', 'pipe', 'pipe'],
   });
+  server.stdout.on('data', (chunk) => process.stdout.write(chunk));
+  server.stderr.on('data', (chunk) => process.stderr.write(chunk));
+  server.once('error', (err) => {
+    console.error('peek process error:', err);
+  });
 
-  // Poll until ready
-  const deadline = Date.now() + 30_000;
-  while (Date.now() < deadline) {
-    try {
-      const r = await fetch(`http://localhost:${PORT}`);
-      if (r.ok) break;
-    } catch { /* not ready */ }
-    await setTimeout(1000);
-  }
-  console.log('✅ Server ready');
+  const payload = logs.map((l) => `${JSON.stringify(l)}\n`).join('');
+  server.stdin.write(payload);
+  server.stdin.end();
+
+  await waitForServerReady();
+  await waitForQueryCount(logs.length);
+  console.log(`Server ready with ${logs.length} logs`);
 
   browser = await chromium.launch({ headless: true });
   const ctx = await browser.newContext({
     viewport: { width: 1400, height: 800 },
-    deviceScaleFactor: 2,          // retina-quality screenshot
+    deviceScaleFactor: 2, // retina-quality screenshot
     colorScheme: 'dark',
   });
   const page = await ctx.newPage();
   await page.goto(`http://localhost:${PORT}`);
-  await setTimeout(2000);
+  await page.waitForSelector('.log-table-body .col-chevron');
 
   // Type a Lucene query and execute
   await page.fill('input[type="text"]', 'level:ERROR OR level:WARN');
   await page.click('button:has-text("Search")');
-  await setTimeout(1500);
+  await page.waitForTimeout(500);
+  await page.waitForSelector('.log-table-body .col-chevron');
 
   // Expand the first error row to show fields
   await page.evaluate(() => {
@@ -112,7 +194,7 @@ try {
       }
     }
   });
-  await setTimeout(800);
+  await page.waitForTimeout(300);
 
   // Pin "service" column
   const clicked = await page.evaluate(() => {
@@ -121,18 +203,18 @@ try {
     if (el) { el.click(); return true; }
     return false;
   });
-  if (clicked) await setTimeout(800);
+  if (clicked) await page.waitForTimeout(300);
 
   // Ensure output directory exists
   const { mkdirSync } = await import('fs');
   mkdirSync(resolve(OUTPUT, '..'), { recursive: true });
 
   await page.screenshot({ path: OUTPUT, fullPage: false });
-  console.log(`📸 Screenshot saved: ${OUTPUT}`);
+  console.log(`Screenshot saved: ${OUTPUT}`);
 
 } catch (err) {
-  console.error('❌', err);
-  process.exit(1);
+  console.error(err);
+  process.exitCode = 1;
 } finally {
   await cleanup();
 }
