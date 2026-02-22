@@ -7,6 +7,7 @@ import { once } from 'events';
 import { setTimeout as delay } from 'timers/promises';
 import { basename, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
+import { expect } from '@playwright/test';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '..');
@@ -177,4 +178,22 @@ export async function getHeaders(page) {
       .map((d) => d.textContent.replace(/[✕×]/g, '').trim())
       .filter((t) => t.length > 0)
   );
+}
+
+export async function readJSONLocalStorage(page, key, fallback = []) {
+  return page.evaluate(([storageKey, defaultValue]) => {
+    try {
+      return JSON.parse(localStorage.getItem(storageKey) || JSON.stringify(defaultValue));
+    } catch {
+      return defaultValue;
+    }
+  }, [key, fallback]);
+}
+
+export async function waitForHistoryEntry(page, query, predicate, { timeout = 5_000 } = {}) {
+  await expect.poll(async () => {
+    const history = await readJSONLocalStorage(page, 'peek.queryHistory.v1', []);
+    const entry = history.find((item) => item.query === query);
+    return Boolean(entry && predicate(entry, history));
+  }, { timeout }).toBe(true);
 }
