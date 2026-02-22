@@ -197,3 +197,24 @@ export async function waitForHistoryEntry(page, query, predicate, { timeout = 5_
     return Boolean(entry && predicate(entry, history));
   }, { timeout }).toBe(true);
 }
+
+export async function waitForFields(page, { timeout = 10_000, interval = 200 } = {}) {
+  const deadline = Date.now() + timeout;
+  let lastError = null;
+  const fieldsURL = new URL('/fields', page.url()).toString();
+
+  while (Date.now() < deadline) {
+    try {
+      const resp = await page.request.get(fieldsURL);
+      if (!resp.ok()) throw new Error(`fields status ${resp.status()}`);
+      const data = await resp.json();
+      if (Array.isArray(data?.fields)) return data;
+      lastError = new Error('fields payload missing array');
+    } catch (err) {
+      lastError = err;
+    }
+    await delay(interval);
+  }
+
+  throw new Error(`Timed out waiting for /fields: ${lastError?.message || 'unknown error'}`);
+}
