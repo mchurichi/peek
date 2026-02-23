@@ -490,6 +490,83 @@
 
         .star-btn:hover { color: #ffd700; background: #333; }
         .star-btn.starred { color: #ffd700; border-color: #888; }
+
+        /* Copy buttons */
+        .copy-btn {
+            padding: 0 0.3rem;
+            background: transparent;
+            color: #555;
+            border: 1px solid transparent;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            line-height: 1.4;
+            transition: color 0.15s, border-color 0.15s;
+        }
+        .copy-btn:hover { color: #ccc; border-color: #555; background: transparent; }
+
+        /* Row-level copy button (overlaid inside .col-msg) */
+        .log-row > .col-msg {
+            position: relative;
+            overflow: visible;
+        }
+        .col-msg-text {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            padding-right: 1.6rem;
+        }
+        .row-copy-btn {
+            position: absolute;
+            right: 2px;
+            top: 50%;
+            transform: translateY(-50%);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.15s;
+            z-index: 1;
+        }
+        .log-row > .col-msg:hover .row-copy-btn,
+        .col-msg:hover .row-copy-btn {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* Field-value copy button */
+        .field-copy-btn {
+            opacity: 0;
+            transition: opacity 0.15s;
+            margin-left: 0.4rem;
+            vertical-align: middle;
+            pointer-events: none;
+        }
+        .fields-table tr:hover .field-copy-btn {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* Toast notification */
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background: #333;
+            color: #e0e0e0;
+            padding: 0.4rem 0.9rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            opacity: 0;
+            transform: translateY(6px);
+            transition: opacity 0.2s, transform 0.2s;
+            pointer-events: none;
+            z-index: 9999;
+            border: 1px solid #4d4d4d;
+        }
+        .toast.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
     </style>
 </head>
 <body>
@@ -875,6 +952,53 @@
                 queryInputEl.focus()
             }
             executeQuery()
+        }
+
+        // ──────────────────────────────────────────
+        // Clipboard helpers
+        // ──────────────────────────────────────────
+        let toastTimer = null
+
+        function showToast(msg) {
+            const existing = document.querySelector('.toast')
+            if (existing) existing.remove()
+            if (toastTimer) { clearTimeout(toastTimer); toastTimer = null }
+            const el = document.createElement('div')
+            el.className = 'toast'
+            el.textContent = msg
+            document.body.appendChild(el)
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => { el.classList.add('visible') })
+            })
+            toastTimer = setTimeout(() => {
+                el.classList.remove('visible')
+                setTimeout(() => { el.remove(); toastTimer = null }, 300)
+            }, 1500)
+        }
+
+        function copyToClipboard(text, toastMsg) {
+            if (navigator.clipboard?.writeText) {
+                navigator.clipboard.writeText(text).then(
+                    () => showToast(toastMsg),
+                    () => showToast('Copy failed')
+                )
+            } else {
+                try {
+                    // execCommand is deprecated but kept as a last-resort fallback
+                    // for environments that do not support the Clipboard API.
+                    const ta = document.createElement('textarea')
+                    ta.value = text
+                    ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0;'
+                    document.body.appendChild(ta)
+                    ta.focus()
+                    ta.select()
+                    document.execCommand('copy')
+                    ta.remove()
+                    showToast(toastMsg)
+                } catch {
+                    showToast('Copy failed')
+                }
+            }
         }
 
         // ──────────────────────────────────────────
@@ -1514,7 +1638,11 @@
                         }, k),
                         td({class: "field-val", title: `Click to filter ${k}:${v}`,
                             onclick: e => { e.stopPropagation(); filterByField(k, String(v)) }
-                        }, String(v)),
+                        }, String(v),
+                            button({class: "copy-btn field-copy-btn", title: "Copy value",
+                                onclick: e => { e.stopPropagation(); copyToClipboard(String(v), 'Copied value') }
+                            }, "\u29c9")
+                        ),
                     )
                 )
             )
@@ -1569,7 +1697,12 @@
             // Fixed columns
             van.add(mainRow, div({class: "col-time"}, fmtTime(entry.timestamp)))
             van.add(mainRow, div({class: `col-level level-${levelClass}`}, levelDisplay))
-            van.add(mainRow, div({class: "col-msg"}, entry.message))
+            van.add(mainRow, div({class: "col-msg"},
+                span({class: "col-msg-text"}, entry.message),
+                button({class: "copy-btn row-copy-btn", title: "Copy log line",
+                    onclick: e => { e.stopPropagation(); copyToClipboard(entry.raw || entry.message || '', 'Copied log line') }
+                }, "\u29c9")
+            ))
 
             // Pinned columns
             for (const col of pinned.val) {
