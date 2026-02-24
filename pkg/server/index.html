@@ -534,11 +534,13 @@
         }
 
         /* Field-value copy button */
+        .field-copy-cell {
+            padding-left: 0.25rem;
+            vertical-align: top;
+        }
         .field-copy-btn {
             opacity: 0;
             transition: opacity 0.15s;
-            margin-left: 0.4rem;
-            vertical-align: middle;
             pointer-events: none;
         }
         .fields-table tr:hover .field-copy-btn {
@@ -1638,7 +1640,8 @@
                         }, k),
                         td({class: "field-val", title: `Click to filter ${k}:${v}`,
                             onclick: e => { e.stopPropagation(); filterByField(k, String(v)) }
-                        }, String(v),
+                        }, String(v)),
+                        td({class: "field-copy-cell"},
                             button({class: "copy-btn field-copy-btn", title: "Copy value",
                                 onclick: e => { e.stopPropagation(); copyToClipboard(String(v), 'Copied value') }
                             }, "\u29c9")
