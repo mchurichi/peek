@@ -34,8 +34,10 @@ type client struct {
 	query     string
 	filter    query.Filter
 	timeRange *storage.TimeRange
-	send      chan interface{} // carries *storage.LogEntry or pre-built map messages
-	done      chan struct{}
+	// send carries either *storage.LogEntry (live stream) or map[string]interface{} (results/control).
+	// All writes to conn are serialised through writePump which drains this channel.
+	send chan interface{}
+	done chan struct{}
 }
 
 // NewServer creates a new HTTP server
@@ -88,7 +90,9 @@ func (s *Server) Start(port int) error {
 func (s *Server) handleVanJS(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/javascript")
 	w.Header().Set("Cache-Control", "max-age=86400")
-	w.Write(vanJS)
+	if _, err := w.Write(vanJS); err != nil {
+		log.Printf("error writing van.js response: %v", err)
+	}
 }
 
 // handleIndex serves the web UI
