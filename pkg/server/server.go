@@ -17,6 +17,9 @@ import (
 //go:embed index.html
 var indexHTML string
 
+//go:embed van.min.js
+var vanJS []byte
+
 // Server represents the HTTP server
 type Server struct {
 	storage       *storage.BadgerStorage
@@ -31,8 +34,10 @@ type client struct {
 	query     string
 	filter    query.Filter
 	timeRange *storage.TimeRange
-	send      chan *storage.LogEntry
-	done      chan struct{}
+	// send carries either *storage.LogEntry (live stream) or map[string]interface{} (results/control).
+	// All writes to conn are serialised through writePump which drains this channel.
+	send chan interface{}
+	done chan struct{}
 }
 
 // NewServer creates a new HTTP server
@@ -65,6 +70,9 @@ func (s *Server) Start(port int) error {
 	// Serve static web UI
 	mux.HandleFunc("/", s.handleIndex)
 
+	// Serve bundled VanJS (avoids CDN dependency)
+	mux.HandleFunc("/van.min.js", s.handleVanJS)
+
 	// API endpoints
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/stats", s.handleStats)
@@ -76,6 +84,15 @@ func (s *Server) Start(port int) error {
 	log.Printf("Starting server on http://localhost%s", addr)
 
 	return http.ListenAndServe(addr, mux)
+}
+
+// handleVanJS serves the bundled VanJS library
+func (s *Server) handleVanJS(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/javascript")
+	w.Header().Set("Cache-Control", "max-age=86400")
+	if _, err := w.Write(vanJS); err != nil {
+		log.Printf("error writing van.js response: %v", err)
+	}
 }
 
 // handleIndex serves the web UI
@@ -253,7 +270,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	c := &client{
 		conn: conn,
-		send: make(chan *storage.LogEntry, 100),
+		send: make(chan interface{}, 100),
 		done: make(chan struct{}),
 	}
 
@@ -348,25 +365,31 @@ func (s *Server) readPump(c *client) {
 	}
 }
 
-// writePump sends messages to the WebSocket
+// writePump sends messages to the WebSocket — only goroutine allowed to write.
 func (s *Server) writePump(c *client) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case entry, ok := <-c.send:
+		case msg, ok := <-c.send:
 			if !ok {
 				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
 
-			msg := map[string]interface{}{
-				"type":  "log",
-				"entry": entry,
+			// Wrap raw log entries; pre-built maps pass through unchanged.
+			var payload interface{}
+			if entry, ok := msg.(*storage.LogEntry); ok {
+				payload = map[string]interface{}{
+					"type":  "log",
+					"entry": entry,
+				}
+			} else {
+				payload = msg
 			}
 
-			if err := c.conn.WriteJSON(msg); err != nil {
+			if err := c.conn.WriteJSON(payload); err != nil {
 				return
 			}
 
@@ -382,7 +405,7 @@ func (s *Server) writePump(c *client) {
 	}
 }
 
-// sendInitialResults sends initial query results to a client
+// sendInitialResults sends initial query results through the write channel.
 func (s *Server) sendInitialResults(c *client, q query.Filter) {
 	entries, total, err := s.storage.QueryWithTimeRange(q, c.timeRange, 100, 0)
 	if err != nil {
@@ -397,7 +420,10 @@ func (s *Server) sendInitialResults(c *client, q query.Filter) {
 		"took_ms": 0,
 	}
 
-	c.conn.WriteJSON(msg)
+	select {
+	case c.send <- msg:
+	case <-c.done:
+	}
 }
 
 // BroadcastLog broadcasts a new log entry to all connected clients

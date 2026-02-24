@@ -64,7 +64,7 @@ e2e/loggen.mjs             Manual test-data log generator (json/logfmt/mixed)
 ## Dependencies
 
 - Go, BadgerDB, Gorilla WebSocket, BurntSushi/toml
-- Frontend: VanJS from CDN (~1KB), no build step
+- Frontend: VanJS (~1KB, bundled in binary), no build step
 - E2E: `@playwright/test` runner + `playwright` (Node.js)
 
 ## Architecture
@@ -114,7 +114,7 @@ BadgerDB keys: `log:{timestamp_nano}:{id}` — enables time-range key seeking.
 
 - **Single UI file**: `pkg/server/index.html` is the only HTML source — embedded via `//go:embed`
 - **Scroll preservation**: expanding rows and adding columns must not reset scroll position — this is a critical UX invariant
-- **Zero JS dependencies**: no build tools, no npm packages in the UI. VanJS from CDN only.
+- **Zero JS dependencies**: no build tools, no npm packages in the UI. VanJS is bundled in the binary (`pkg/server/van.min.js`, served at `/van.min.js`).
 - **Single binary**: do not break the `//go:embed` distribution model
 - **No `<table>` elements**: the log table is CSS Grid
 - **No VanJS state mutation**: always replace (`logs.val = [...logs.val, entry]`)

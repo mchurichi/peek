@@ -15,6 +15,7 @@ const PROJECT_ROOT = resolve(__dirname, '..');
 const STARTUP_TIMEOUT_MS = 30_000;
 const POLL_INTERVAL_MS = 1_000;
 const FILE_PORT_OFFSETS = Object.freeze({
+  'copy.spec.mjs': 8,
   'datetime.spec.mjs': 0,
   'field-filter-append.spec.mjs': 1,
   'levelless.spec.mjs': 2,
