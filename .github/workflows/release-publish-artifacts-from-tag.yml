@@ -1,4 +1,4 @@
-name: Release On Tag
+name: "Release: Publish Artifacts From Tag"
 
 on:
   push:
@@ -6,7 +6,8 @@ on:
       - 'v*.*.*'
 
 jobs:
-  goreleaser:
+  publish-release-artifacts:
+    name: Publish Release Artifacts
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -21,7 +22,7 @@ jobs:
         with:
           go-version: '1.24'
 
-      - name: Run GoReleaser
+      - name: Publish artifacts with GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser

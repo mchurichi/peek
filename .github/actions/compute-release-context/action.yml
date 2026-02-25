@@ -1,0 +1,162 @@
+name: "Compute Release Context"
+description: "Computes release label policy, bump suggestion, and next tag metadata for a PR."
+
+inputs:
+  github-token:
+    description: GitHub token used for API calls.
+    required: true
+  owner:
+    description: Repository owner.
+    required: true
+  repo:
+    description: Repository name.
+    required: true
+  pr-number:
+    description: Pull request number.
+    required: true
+  pr-title:
+    description: Pull request title.
+    required: true
+  pr-body:
+    description: Pull request body.
+    required: false
+    default: ""
+  pr-labels-json:
+    description: JSON-encoded pull request labels array.
+    required: true
+  include-suggestion:
+    description: Whether to fetch commits and compute bump suggestion.
+    required: false
+    default: "true"
+
+outputs:
+  policy_ok:
+    description: Whether exactly one release label was provided.
+    value: ${{ steps.compute.outputs.policy_ok }}
+  matched_labels_json:
+    description: JSON array of matched release labels.
+    value: ${{ steps.compute.outputs.matched_labels_json }}
+  matched_labels_count:
+    description: Number of matched release labels.
+    value: ${{ steps.compute.outputs.matched_labels_count }}
+  selected_label:
+    description: Selected release label when policy is valid.
+    value: ${{ steps.compute.outputs.selected_label }}
+  selected_bump:
+    description: Bump derived from selected release label when policy is valid.
+    value: ${{ steps.compute.outputs.selected_bump }}
+  selected_next_tag:
+    description: Next SemVer tag derived from selected bump.
+    value: ${{ steps.compute.outputs.selected_next_tag }}
+  selected_next_tag_display:
+    description: Display-friendly next tag from selected bump.
+    value: ${{ steps.compute.outputs.selected_next_tag_display }}
+  suggested_bump:
+    description: Suggested bump from title/body/commits policy.
+    value: ${{ steps.compute.outputs.suggested_bump }}
+  suggested_label:
+    description: Suggested release label from bump suggestion.
+    value: ${{ steps.compute.outputs.suggested_label }}
+  suggestion_reason:
+    description: Why the suggestion was chosen.
+    value: ${{ steps.compute.outputs.suggestion_reason }}
+  suggestion_source:
+    description: Source used for suggestion.
+    value: ${{ steps.compute.outputs.suggestion_source }}
+  suggested_next_tag:
+    description: Next SemVer tag from suggestion.
+    value: ${{ steps.compute.outputs.suggested_next_tag }}
+  suggested_next_tag_display:
+    description: Display-friendly suggested next tag.
+    value: ${{ steps.compute.outputs.suggested_next_tag_display }}
+  signature:
+    description: Stable signature for comment change detection.
+    value: ${{ steps.compute.outputs.signature }}
+
+runs:
+  using: composite
+  steps:
+    - name: Compute release metadata
+      id: compute
+      uses: actions/github-script@v7
+      env:
+        RELEASE_OWNER: ${{ inputs.owner }}
+        RELEASE_REPO: ${{ inputs.repo }}
+        RELEASE_PR_NUMBER: ${{ inputs.pr-number }}
+        RELEASE_PR_TITLE: ${{ inputs.pr-title }}
+        RELEASE_PR_BODY: ${{ inputs.pr-body }}
+        RELEASE_PR_LABELS_JSON: ${{ inputs.pr-labels-json }}
+        RELEASE_INCLUDE_SUGGESTION: ${{ inputs.include-suggestion }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const releaseUtils = require('./.github/scripts/release-utils.cjs');
+          const owner = process.env.RELEASE_OWNER;
+          const repo = process.env.RELEASE_REPO;
+          const prNumber = Number(process.env.RELEASE_PR_NUMBER);
+          const prTitle = process.env.RELEASE_PR_TITLE || '';
+          const prBody = process.env.RELEASE_PR_BODY || '';
+          const includeSuggestion = process.env.RELEASE_INCLUDE_SUGGESTION === 'true';
+
+          let labels = [];
+          try {
+            labels = JSON.parse(process.env.RELEASE_PR_LABELS_JSON || '[]') || [];
+          } catch (err) {
+            core.setFailed(`Invalid pr-labels-json input: ${err.message}`);
+            return;
+          }
+
+          const matchedLabels = releaseUtils.releaseLabels(labels);
+          const policyOk = matchedLabels.length === 1;
+          const selectedLabel = policyOk ? matchedLabels[0] : '';
+          const selectedBump = selectedLabel ? releaseUtils.LABEL_TO_BUMP[selectedLabel] : '';
+
+          const tags = await github.paginate(github.rest.repos.listTags, {
+            owner,
+            repo,
+            per_page: 100,
+          });
+          const tagNames = tags.map(t => t.name);
+
+          const selectedNextTag = selectedBump ? releaseUtils.nextTag(tagNames, selectedBump) : null;
+          const selectedNextTagDisplay = selectedNextTag || 'no tag (skip-release)';
+
+          let suggestion;
+          if (includeSuggestion) {
+            const commits = await github.paginate(github.rest.pulls.listCommits, {
+              owner,
+              repo,
+              pull_number: prNumber,
+              per_page: 100,
+            });
+            suggestion = releaseUtils.suggestBump({
+              title: prTitle,
+              body: prBody,
+              commits,
+            });
+          } else {
+            suggestion = selectedBump
+              ? { bump: selectedBump, reason: 'Suggested from selected release label', source: 'selected label' }
+              : { bump: 'skip', reason: 'No release label selected', source: 'selected label' };
+          }
+
+          const suggestedLabel = releaseUtils.BUMP_TO_LABEL[suggestion.bump];
+          const suggestedNextTag = releaseUtils.nextTag(tagNames, suggestion.bump);
+          const suggestedNextTagDisplay = suggestedNextTag || 'no tag (skip-release)';
+          const signature = `${suggestedLabel}|${suggestedNextTagDisplay}|${suggestion.reason}|${suggestion.source}`;
+
+          core.setOutput('policy_ok', String(policyOk));
+          core.setOutput('matched_labels_json', JSON.stringify(matchedLabels));
+          core.setOutput('matched_labels_count', String(matchedLabels.length));
+          core.setOutput('selected_label', selectedLabel);
+          core.setOutput('selected_bump', selectedBump || '');
+          core.setOutput('selected_next_tag', selectedNextTag || '');
+          core.setOutput('selected_next_tag_display', selectedNextTagDisplay);
+
+          core.setOutput('suggested_bump', suggestion.bump);
+          core.setOutput('suggested_label', suggestedLabel);
+          core.setOutput('suggestion_reason', suggestion.reason);
+          core.setOutput('suggestion_source', suggestion.source);
+          core.setOutput('suggested_next_tag', suggestedNextTag || '');
+          core.setOutput('suggested_next_tag_display', suggestedNextTagDisplay);
+          core.setOutput('signature', signature);

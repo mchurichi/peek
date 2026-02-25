@@ -1,20 +1,34 @@
-name: Release Label Policy
+name: "Release: Validate Labels And Suggest Bump"
 
 on:
   pull_request_target:
     types: [opened, reopened, synchronize, edited, labeled, unlabeled, ready_for_review]
 
 jobs:
-  validate-release-label:
+  validate-release-context:
+    name: Validate Release Labels And Suggest Bump
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Validate labels and suggest bump
+      - name: Compute release context
+        id: release_context
+        uses: ./.github/actions/compute-release-context
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          owner: ${{ github.repository_owner }}
+          repo: ${{ github.event.repository.name }}
+          pr-number: ${{ github.event.pull_request.number }}
+          pr-title: ${{ github.event.pull_request.title }}
+          pr-body: ${{ github.event.pull_request.body }}
+          pr-labels-json: ${{ toJSON(github.event.pull_request.labels) }}
+          include-suggestion: 'true'
+
+      - name: Upsert release suggestion comment and enforce label policy
         uses: actions/github-script@v7
         with:
           script: |
@@ -23,38 +37,12 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const marker = '<!-- peek-release-label-suggestion -->';
-            const releaseUtils = require('./.github/scripts/release-utils.cjs');
-
-            const uniqueMatchedLabels = releaseUtils.releaseLabels(pr.labels || []);
-            const policyOk = uniqueMatchedLabels.length === 1;
-
-            const commits = await github.paginate(github.rest.pulls.listCommits, {
-              owner,
-              repo,
-              pull_number: issueNumber,
-              per_page: 100,
-            });
-            const suggestion = releaseUtils.suggestBump({
-              title: pr.title,
-              body: pr.body,
-              commits,
-            });
-
-            const suggestedLabel = releaseUtils.BUMP_TO_LABEL[suggestion.bump];
-            const source = suggestion.source;
-
-            const tags = await github.paginate(github.rest.repos.listTags, {
-              owner,
-              repo,
-              per_page: 100,
-            });
-            const predictedTag = releaseUtils.nextTag(
-              tags.map(t => t.name),
-              suggestion.bump,
-            );
-            const predictedTagDisplay = predictedTag || 'no tag (skip-release)';
-
-            const signature = `${suggestedLabel}|${predictedTagDisplay}|${suggestion.reason}|${source}`;
+            const policyOk = '${{ steps.release_context.outputs.policy_ok }}' === 'true';
+            const suggestedLabel = '${{ steps.release_context.outputs.suggested_label }}';
+            const predictedTagDisplay = '${{ steps.release_context.outputs.suggested_next_tag_display }}';
+            const suggestionReason = `${{ steps.release_context.outputs.suggestion_reason }}`;
+            const source = '${{ steps.release_context.outputs.suggestion_source }}';
+            const signature = `${{ steps.release_context.outputs.signature }}`;
 
             const body = [
               marker,
@@ -62,7 +50,7 @@ jobs:
               '',
               `Suggested label: \`${suggestedLabel}\``,
               `If merged now, estimated next tag: \`${predictedTagDisplay}\``,
-              `Why: ${suggestion.reason} (source: ${source})`,
+              `Why: ${suggestionReason} (source: ${source})`,
               '',
               'You can change this by updating PR labels before merge.',
               '',

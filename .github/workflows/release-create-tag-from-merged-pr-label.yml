@@ -1,4 +1,4 @@
-name: Release Tag On Merge
+name: "Release: Create Tag From Merged PR Label"
 
 on:
   pull_request_target:
@@ -9,46 +9,55 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  create-release-tag:
+  create-tag-from-merged-pr-label:
+    name: Create SemVer Tag From Merged PR Label
     if: ${{ github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: read
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Create tag from release label
+      - name: Compute release context
+        id: release_context
+        uses: ./.github/actions/compute-release-context
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          owner: ${{ github.repository_owner }}
+          repo: ${{ github.event.repository.name }}
+          pr-number: ${{ github.event.pull_request.number }}
+          pr-title: ${{ github.event.pull_request.title }}
+          pr-body: ${{ github.event.pull_request.body }}
+          pr-labels-json: ${{ toJSON(github.event.pull_request.labels) }}
+          include-suggestion: 'false'
+
+      - name: Create SemVer tag
         uses: actions/github-script@v7
         with:
           script: |
             const pr = context.payload.pull_request;
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const releaseUtils = require('./.github/scripts/release-utils.cjs');
-            const uniqueMatchedLabels = releaseUtils.releaseLabels(pr.labels || []);
+            const policyOk = '${{ steps.release_context.outputs.policy_ok }}' === 'true';
+            const bump = '${{ steps.release_context.outputs.selected_bump }}';
+            const nextTag = '${{ steps.release_context.outputs.selected_next_tag }}';
 
-            if (uniqueMatchedLabels.length !== 1) {
+            if (!policyOk) {
               core.setFailed('Expected exactly one release label on merged PR.');
               return;
             }
 
-            const bump = releaseUtils.LABEL_TO_BUMP[uniqueMatchedLabels[0]];
             if (bump === 'skip') {
               core.info('skip-release label selected; no tag will be created.');
               return;
             }
 
-            const tags = await github.paginate(github.rest.repos.listTags, {
-              owner,
-              repo,
-              per_page: 100,
-            });
-            const nextTag = releaseUtils.nextTag(
-              tags.map(t => t.name),
-              bump,
-            );
+            if (!nextTag) {
+              core.setFailed('Failed to compute next SemVer tag from selected release label.');
+              return;
+            }
 
             try {
               await github.rest.git.createRef({

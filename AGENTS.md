@@ -61,10 +61,11 @@ e2e/field-filter-append.spec.mjs Field-value click appends safe Lucene token to 
 e2e/query-history.spec.mjs Query history and starred queries (localStorage, shortcuts, dropdowns)
 e2e/screenshot.mjs         Screenshot generator with realistic data
 e2e/loggen.mjs             Manual test-data log generator (json/logfmt/mixed)
-.github/workflows/ci.yml   CI pipeline (build, vet, unit tests, E2E tests)
-.github/workflows/release-label-policy.yml PR label enforcement + bump suggestion comment
-.github/workflows/release-tag-on-merge.yml Auto-tag merged PRs using release labels
-.github/workflows/release-on-tag.yml Publish GitHub releases/artifacts on SemVer tags
+.github/workflows/ci-build-test.yml   CI pipeline (build, vet, unit tests, E2E tests)
+.github/actions/compute-release-context/action.yml Composite action that computes release-label policy and SemVer context
+.github/workflows/release-validate-labels-and-suggest-bump.yml Validate PR release labels and upsert bump suggestion comment
+.github/workflows/release-create-tag-from-merged-pr-label.yml Create SemVer tag from selected PR release label on merge
+.github/workflows/release-publish-artifacts-from-tag.yml Publish GitHub Release artifacts on SemVer tag push
 .github/scripts/release-utils.cjs Shared release-label and SemVer helper functions for workflows
 .goreleaser.yml            GoReleaser build/archive/checksum config
 ```
