@@ -24,6 +24,7 @@ const FILE_PORT_OFFSETS = Object.freeze({
   'search.spec.mjs': 5,
   'sliding-window.spec.mjs': 6,
   'table.spec.mjs': 7,
+  'ui-prefs.spec.mjs': 9,
 });
 
 function hashOffset(fileName) {

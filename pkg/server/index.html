@@ -569,6 +569,17 @@
             opacity: 1;
             transform: translateY(0);
         }
+
+        .reset-prefs-btn {
+            padding: 0.35rem 0.6rem;
+            background: #2a2a2a;
+            color: #666;
+            border: 1px solid #4d4d4d;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+        .reset-prefs-btn:hover { color: #ef5350; background: #2a2a2a; }
     </style>
 </head>
 <body>
@@ -632,6 +643,36 @@
 
         function saveStorage(key, value) {
             try { localStorage.setItem(key, JSON.stringify(value)) } catch {}
+        }
+
+        // ──────────────────────────────────────────
+        // UI Preferences — localStorage
+        // ──────────────────────────────────────────
+        const UI_PREFS_KEY = 'peek.uiPrefs.v1'
+
+        function loadUiPrefs() {
+            const raw = loadStorage(UI_PREFS_KEY)
+            if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+            return raw
+        }
+
+        let _uiPrefsSaveTimer = null
+        function saveUiPrefs() {
+            clearTimeout(_uiPrefsSaveTimer)
+            _uiPrefsSaveTimer = setTimeout(() => {
+                try {
+                    const prefs = {
+                        pinnedColumns: [...pinned.val],
+                        columnWidths: Object.fromEntries(columnWidths),
+                        timeRange: {
+                            preset: timePreset.val,
+                            customStart: timeStartStr.val || null,
+                            customEnd: timeEndStr.val || null,
+                        },
+                    }
+                    saveStorage(UI_PREFS_KEY, prefs)
+                } catch {}
+            }, 300)
         }
 
         const queryHistory   = van.state(loadStorage(HISTORY_KEY) || [])
@@ -935,6 +976,7 @@
             pinned.val = cols.includes(field)
                 ? cols.filter(c => c !== field)
                 : [...cols, field]
+            saveUiPrefs()
         }
 
         function filterByField(field, value) {
@@ -1063,6 +1105,7 @@
                     if (colKey && finalWidth) {
                         columnWidths.set(colKey, finalWidth)
                     }
+                    saveUiPrefs()
                 }
                 
                 document.addEventListener("mousemove", onMove)
@@ -1566,15 +1609,20 @@
                 "data-testid": "time-preset",
                 onchange: e => {
                     timePreset.val = e.target.value
+                    saveUiPrefs()
                     if (e.target.value !== "custom") executeQuery()
                 },
             }, ...presets.map(p => option({value: p.value}, p.label)))
+
+            // Sync select DOM value with timePreset state (van.derive runs after options are in the DOM)
+            van.derive(() => { presetEl.value = timePreset.val })
 
             const fromInput = input({
                 type: "datetime-local",
                 class: "time-custom-input",
                 "data-testid": "time-from",
-                oninput:  e => { timeStartStr.val = e.target.value },
+                value: () => timeStartStr.val,
+                oninput:  e => { timeStartStr.val = e.target.value; saveUiPrefs() },
                 onchange: () => executeQuery(),
             })
 
@@ -1582,7 +1630,8 @@
                 type: "datetime-local",
                 class: "time-custom-input",
                 "data-testid": "time-to",
-                oninput:  e => { timeEndStr.val = e.target.value },
+                value: () => timeEndStr.val,
+                oninput:  e => { timeEndStr.val = e.target.value; saveUiPrefs() },
                 onchange: () => executeQuery(),
             })
 
@@ -1594,7 +1643,22 @@
                 span("To:"),   toInput,
             )
 
-            return div({class: "time-range-picker"}, presetEl, customRangeEl)
+            const resetBtn = button({
+                class: "reset-prefs-btn",
+                "data-testid": "reset-ui-prefs-btn",
+                title: "Reset UI preferences (columns, widths, time range) to defaults",
+                onclick: () => {
+                    try { localStorage.removeItem(UI_PREFS_KEY) } catch {}
+                    columnWidths.clear()
+                    pinned.val = []
+                    timePreset.val = "all"
+                    timeStartStr.val = ""
+                    timeEndStr.val = ""
+                    executeQuery()
+                },
+            }, "Reset prefs")
+
+            return div({class: "time-range-picker"}, presetEl, customRangeEl, resetBtn)
         }
 
         // Stats bar
@@ -1803,6 +1867,7 @@
                             cols.splice(fromIdx, 1)
                             cols.splice(toIdx, 0, dragSrcCol)
                             pinned.val = cols
+                            saveUiPrefs()
                         }
                         dragSrcCol = null
                     })
@@ -1990,7 +2055,37 @@
         // ──────────────────────────────────────────
         // Mount & initialize
         // ──────────────────────────────────────────
+
+        // Apply persisted UI preferences before mounting
+        ;(function() {
+            const prefs = loadUiPrefs()
+            if (Array.isArray(prefs.pinnedColumns)) {
+                const cols = prefs.pinnedColumns.filter(c => typeof c === 'string' && c.length > 0)
+                if (cols.length > 0) pinned.val = cols
+            }
+            if (prefs.columnWidths && typeof prefs.columnWidths === 'object' && !Array.isArray(prefs.columnWidths)) {
+                for (const [k, v] of Object.entries(prefs.columnWidths)) {
+                    if (typeof k === 'string' && typeof v === 'string' && v.length > 0) {
+                        columnWidths.set(k, v)
+                    }
+                }
+            }
+            const validPresets = new Set(['all', '15m', '1h', '6h', '24h', '7d', 'today', 'yesterday', 'custom'])
+            if (prefs.timeRange && typeof prefs.timeRange.preset === 'string' && validPresets.has(prefs.timeRange.preset)) {
+                timePreset.val = prefs.timeRange.preset
+                if (prefs.timeRange.preset === 'custom') {
+                    if (typeof prefs.timeRange.customStart === 'string') timeStartStr.val = prefs.timeRange.customStart
+                    if (typeof prefs.timeRange.customEnd === 'string') timeEndStr.val = prefs.timeRange.customEnd
+                }
+            }
+        })()
+
         van.add(document.body, App())
+        // Post-mount: sync time preset select to persisted state (ensures value is set after options are in DOM)
+        {
+            const _presetSel = document.querySelector('[data-testid="time-preset"]')
+            if (_presetSel && timePreset.val !== 'all') _presetSel.value = timePreset.val
+        }
         connectWebSocket()
         loadStats()
         fetchFields()
