@@ -1,6 +1,6 @@
 # Peek
 
-[![CI](https://github.com/mchurichi/peek/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/mchurichi/peek/actions/workflows/ci.yml?query=branch%3Amain)
+[![CI](https://github.com/mchurichi/peek/actions/workflows/ci-build-test.yml/badge.svg?branch=main)](https://github.com/mchurichi/peek/actions/workflows/ci-build-test.yml?query=branch%3Amain)
 
 A minimalist, dev-first CLI log collector and web UI. Pipe logs into `peek`, store them locally, and query them through a real-time web dashboard.
 
