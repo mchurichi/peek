@@ -31,6 +31,7 @@ function compareSemver(a, b) {
 }
 
 function bumpVersion(base, bump) {
+  if (bump === "skip") return null;
   const next = { ...base };
   if (bump === "major") {
     next.major += 1;
@@ -68,6 +69,9 @@ function conventionalTypeToBump(type, breaking) {
   if (breaking) return "major";
   if (type === "feat") return "minor";
   if (type === "fix") return "patch";
+  if (type === "perf") return "patch";
+  if (type === "refactor") return "patch";
+  if (type === "revert") return "patch";
   return null;
 }
 
@@ -129,8 +133,8 @@ function suggestBump({ title, body, commits }) {
   }
 
   return {
-    bump: "patch",
-    reason: "No conventional signal found; defaulting to patch",
+    bump: "skip",
+    reason: "No bump signal found; defaulting to skip-release",
     source: "default policy",
   };
 }

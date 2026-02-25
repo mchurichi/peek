@@ -148,9 +148,9 @@ Peek uses label-driven release automation in GitHub Actions:
 - CI validates label policy and posts a suggestion comment.
 - Recommended Conventional Commit types for PR titles/commits: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `perf`, `ci`, `build`, `style`, `revert` (optionally with scope, and `!` for breaking changes).
 - Suggestion priority is:
-  1. PR title conventional prefix (`fix:`, `feat:`, `feat!:`)
+  1. PR title conventional prefix (`feat:`, `feat!:`, `fix:`, `perf:`, `refactor:`, `revert:`) or `BREAKING CHANGE` marker
   2. Conventional commit messages in the PR
-  3. Default to patch
+  3. Default to `skip-release`
 - Merged PRs to `main` auto-create a SemVer tag unless `skip-release` is selected.
 - Tag pushes (`v*.*.*`) trigger GoReleaser to publish GitHub Releases with multi-platform binaries and checksums.
 

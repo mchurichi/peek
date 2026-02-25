@@ -52,15 +52,16 @@ jobs:
               tags.map(t => t.name),
               suggestion.bump,
             );
+            const predictedTagDisplay = predictedTag || 'no tag (skip-release)';
 
-            const signature = `${suggestedLabel}|${predictedTag}|${suggestion.reason}|${source}`;
+            const signature = `${suggestedLabel}|${predictedTagDisplay}|${suggestion.reason}|${source}`;
 
             const body = [
               marker,
               '### Release Label Suggestion',
               '',
               `Suggested label: \`${suggestedLabel}\``,
-              `If merged now, estimated next tag: \`${predictedTag}\``,
+              `If merged now, estimated next tag: \`${predictedTagDisplay}\``,
               `Why: ${suggestion.reason} (source: ${source})`,
               '',
               'You can change this by updating PR labels before merge.',
