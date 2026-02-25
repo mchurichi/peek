@@ -198,7 +198,7 @@ test.describe('ui-prefs', () => {
       localStorage.setItem('peek.uiPrefs.v1', JSON.stringify({
         pinnedColumns: ['service'],
         columnWidths: {},
-        timeRange: { preset: 'all', customStart: null, customEnd: null },
+        timeRange: { preset: '1h', customStart: null, customEnd: null },
       }));
       localStorage.setItem('peek.queryHistory.v1', JSON.stringify([
         { query: 'level:ERROR', lastUsedAt: '2026-01-01T00:00:00Z', useCount: 1 },
@@ -207,7 +207,8 @@ test.describe('ui-prefs', () => {
     });
     await page.goto(baseURL);
     await expect(page.locator('[data-testid="reset-ui-prefs-btn"]')).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator('.log-row').first()).toBeVisible({ timeout: 10_000 });
+    // Wait for the table header to appear (rows may be empty with 1h preset on old data)
+    await expect(page.locator('.log-table-header')).toBeVisible({ timeout: 10_000 });
 
     // Verify prefs were applied: 'service' column and '1h' preset
     const headersBefore = await getHeaders(page);
