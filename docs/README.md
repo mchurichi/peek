@@ -140,6 +140,20 @@ cat /tmp/peek-sample.log | go run ./cmd/peek --all --no-browser
 --help                     Show usage
 ```
 
+## Release Automation
+
+Peek uses label-driven release automation in GitHub Actions:
+
+- `release:patch`, `release:minor`, `release:major`, or `skip-release` must be set on every PR (exactly one).
+- CI validates label policy and posts a suggestion comment.
+- Recommended Conventional Commit types for PR titles/commits: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `perf`, `ci`, `build`, `style`, `revert` (optionally with scope, and `!` for breaking changes).
+- Suggestion priority is:
+  1. PR title conventional prefix (`feat:`, `feat!:`, `fix:`, `perf:`, `refactor:`, `revert:`) or `BREAKING CHANGE` marker
+  2. Conventional commit messages in the PR
+  3. Default to `skip-release`
+- Merged PRs to `main` auto-create a SemVer tag unless `skip-release` is selected.
+- Tag pushes (`v*.*.*`) trigger GoReleaser to publish GitHub Releases with multi-platform binaries and checksums.
+
 ## Roadmap
 
 ### Phase 2 (Future)

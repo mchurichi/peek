@@ -8,6 +8,9 @@ Minimalist CLI log collector and web UI. Single Go binary — reads structured l
 # Build
 mise exec -- go build -o peek ./cmd/peek
 
+# Print binary version (supports ldflags injection)
+mise exec -- go run ./cmd/peek version
+
 # Collect mode (pipe stdin + web UI)
 cat app.log | mise exec -- go run ./cmd/peek --port 8080
 
@@ -59,6 +62,11 @@ e2e/query-history.spec.mjs Query history and starred queries (localStorage, shor
 e2e/screenshot.mjs         Screenshot generator with realistic data
 e2e/loggen.mjs             Manual test-data log generator (json/logfmt/mixed)
 .github/workflows/ci.yml   CI pipeline (build, vet, unit tests, E2E tests)
+.github/workflows/release-label-policy.yml PR label enforcement + bump suggestion comment
+.github/workflows/release-tag-on-merge.yml Auto-tag merged PRs using release labels
+.github/workflows/release-on-tag.yml Publish GitHub releases/artifacts on SemVer tags
+.github/scripts/release-utils.cjs Shared release-label and SemVer helper functions for workflows
+.goreleaser.yml            GoReleaser build/archive/checksum config
 ```
 
 ## Dependencies
@@ -66,6 +74,7 @@ e2e/loggen.mjs             Manual test-data log generator (json/logfmt/mixed)
 - Go, BadgerDB, Gorilla WebSocket, BurntSushi/toml
 - Frontend: VanJS (~1KB, bundled in binary), no build step
 - E2E: `@playwright/test` runner + `playwright` (Node.js)
+- Release: GoReleaser via GitHub Actions
 
 ## Architecture
 
@@ -84,6 +93,9 @@ stdin → Parser (JSON/logfmt/auto) → BadgerDB (~/.peek/db)
 BadgerDB keys: `log:{timestamp_nano}:{id}` — enables time-range key seeking.
 
 ## Code Conventions
+
+### Repository
+- Use Conventional Commits for all commit messages and PR titles across the entire repository (Go, UI, docs, CI, tooling): `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`, `perf:`, `ci:`, `build:`, `style:`, `revert:`; use `!` for breaking changes, e.g. `feat!:`
 
 ### Go
 - Standard layout: `cmd/`, `pkg/`, `internal/`
@@ -125,3 +137,4 @@ BadgerDB keys: `log:{timestamp_nano}:{id}` — enables time-range key seeking.
 - **Docs boundary**: `/README.md` is consumer-facing usage; `/docs/README.md` is technical/developer/testing guidance
 - **Technical utilities docs**: document tools like `e2e/loggen.mjs` in `/docs/README.md`, not `/README.md`
 - **Keep AGENTS.md up to date**: any change that alters build commands, project structure, dependencies, architecture, conventions, or critical rules documented here MUST include a corresponding update to this file in the same commit
+- **Release labels are mandatory for PRs**: exactly one of `release:patch`, `release:minor`, `release:major`, or `skip-release` is required before merge

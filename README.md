@@ -98,6 +98,14 @@ peek db clean --level DEBUG --force
 
 ## Usage
 
+### Version
+
+Print the build version (supports `-ldflags` injection at build/release time):
+
+```bash
+peek version
+```
+
 ### Collect Mode
 
 Collects logs from stdin and starts an embedded web UI for real-time viewing:

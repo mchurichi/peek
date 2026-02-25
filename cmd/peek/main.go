@@ -20,12 +20,17 @@ import (
 	"github.com/mchurichi/peek/pkg/storage"
 )
 
+var version = "dev"
+
 func main() {
 	// Check for subcommand first
 	args := os.Args[1:]
 
 	if len(args) > 0 {
 		switch args[0] {
+		case "version":
+			printVersion()
+			return
 		case "help", "--help":
 			printHelp()
 			return
@@ -111,6 +116,7 @@ func printHelp() {
 	fmt.Println(`Peek - Minimalist Log Collector & Viewer
 
 USAGE:
+    peek version                         Print build version
     cat app.log | peek [OPTIONS]         Collect logs from stdin (+ embedded web UI)
     peek server [OPTIONS]                Start web server (browse previously collected logs)
     peek db stats                        Show database info
@@ -163,6 +169,10 @@ EXAMPLES:
     peek db clean --level DEBUG
 
 For more information: https://github.com/mchurichi/peek`)
+}
+
+func printVersion() {
+	fmt.Printf("peek %s\n", version)
 }
 
 func isStdinPiped() bool {
@@ -335,7 +345,7 @@ func runDbClean(args []string) error {
 	} else if *olderThan != "" {
 		duration, _ := parseDuration(*olderThan)
 		cutoff := time.Now().Add(-duration)
-		
+
 		deleted, err = db.DeleteOlderThan(cutoff)
 		if err != nil {
 			return fmt.Errorf("failed to delete older entries: %w", err)
