@@ -4,7 +4,7 @@
 
 import { test, expect } from '@playwright/test';
 import { setTimeout as delay } from 'timers/promises';
-import { portForTestFile, postJSON, startServer, stopServer, waitForFields, waitForQuery } from './helpers.mjs';
+import { getTimePresetValue, portForTestFile, postJSON, selectTimePreset, startServer, stopServer, waitForFields, waitForQuery } from './helpers.mjs';
 
 let server;
 let baseURL;
@@ -26,10 +26,10 @@ test.describe('datetime', () => {
     await waitForFields(page);
 
     const rawHtml = await page.evaluate(() => document.documentElement.outerHTML);
-    expect(rawHtml).toContain('time-range-picker');
+    expect(rawHtml).toContain('time-range-btn');
     expect(rawHtml).toContain('time-preset');
-    expect(rawHtml).toContain('time-custom-range');
-    expect(rawHtml).toContain('DateRangePicker');
+    expect(rawHtml).toContain('time-custom-row');
+    expect(rawHtml).toContain('time-custom-input');
     expect(rawHtml).toContain('getTimeRange');
 
     const nowISO = new Date().toISOString();
@@ -60,33 +60,35 @@ test.describe('datetime', () => {
     expect(allResp.status).toBe(200);
     expect(allResp.body?.total).toBeGreaterThan(0);
 
-    const hasPresetSelect = await page.evaluate(() =>
+    const hasPresetBtn = await page.evaluate(() =>
       !!document.querySelector('[data-testid="time-preset"]')
     );
-    expect(hasPresetSelect).toBeTruthy();
+    expect(hasPresetBtn).toBeTruthy();
 
-    if (hasPresetSelect) {
-      const optionValues = await page.evaluate(() => {
-        const s = document.querySelector('[data-testid="time-preset"]');
-        return Array.from(s.options).map((o) => o.value);
-      });
-      expect(optionValues).toEqual(expect.arrayContaining(['all', '1h', '7d', 'custom']));
+    if (hasPresetBtn) {
+      // Verify dropdown contains expected preset values by opening it
+      await page.click('[data-testid="time-preset"]');
+      await page.waitForSelector('.dropdown-portal', { timeout: 3_000 });
+      const itemTexts = await page.evaluate(() =>
+        Array.from(document.querySelectorAll('.dropdown-portal .dp-item'))
+          .map(el => el.textContent.trim())
+      );
+      expect(itemTexts).toEqual(expect.arrayContaining(['All time', 'Last 1 hour', 'Last 7 days', 'Custom range\u2026']));
+      // Close dropdown by pressing Escape
+      await page.keyboard.press('Escape');
+      await delay(200);
 
       const customHidden = await page.evaluate(() => {
-        const el = document.querySelector('.time-custom-range');
+        const el = document.querySelector('.time-custom-row');
         return !el || el.style.display === 'none';
       });
       expect(customHidden).toBeTruthy();
 
-      await page.evaluate(() => {
-        const s = document.querySelector('[data-testid="time-preset"]');
-        s.value = 'custom';
-        s.dispatchEvent(new Event('change', { bubbles: true }));
-      });
+      await selectTimePreset(page, 'custom');
       await delay(400);
 
       const customVisible = await page.evaluate(() => {
-        const el = document.querySelector('.time-custom-range');
+        const el = document.querySelector('.time-custom-row');
         return !!(el && el.style.display !== 'none');
       });
       expect(customVisible).toBeTruthy();
@@ -97,11 +99,7 @@ test.describe('datetime', () => {
         await route.continue();
       });
 
-      await page.evaluate(() => {
-        const s = document.querySelector('[data-testid="time-preset"]');
-        s.value = '1h';
-        s.dispatchEvent(new Event('change', { bubbles: true }));
-      });
+      await selectTimePreset(page, '1h');
       await delay(1000);
 
       expect(capturedBody?.start).not.toBeNull();

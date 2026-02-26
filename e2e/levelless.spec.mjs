@@ -50,7 +50,7 @@ test.describe('levelless', () => {
     expect(hasINFO).toBeFalsy();
 
     const noneCount = await page.evaluate(() =>
-      document.querySelectorAll('.col-level.level-NONE').length
+      document.querySelectorAll('.col-level .level-NONE').length
     );
     expect(noneCount).toBeGreaterThanOrEqual(10);
 

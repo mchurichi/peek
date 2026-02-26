@@ -36,14 +36,12 @@ test.describe('query-history', () => {
     await page.goto(baseURL);
 
     const searchInput = page.locator('.search-editor-input');
-    const searchBtn = page.locator('button:has-text("Search")');
     await expect(searchInput).toBeVisible();
-    await expect(searchBtn).toBeVisible();
     const readHistory = () => readJSONLocalStorage(page, 'peek.queryHistory.v1', []);
     const readStarred = () => readJSONLocalStorage(page, 'peek.starredQueries.v1', []);
     const executeQuery = async (query) => {
       await searchInput.fill(query);
-      await searchBtn.click();
+      await searchInput.press('Enter');
       await waitForHistoryEntry(
         page,
         query,
@@ -90,14 +88,14 @@ test.describe('query-history', () => {
     const histBtn = page.locator('[data-testid="history-btn"]');
     await expect(histBtn).toBeVisible();
     await histBtn.click();
-    await expect(page.locator('.query-panel-item .qp-text').first()).toBeVisible();
-    const histPanelItems = await page.locator('.query-panel-item .qp-text').allTextContents();
+    await page.waitForSelector('.dropdown-portal', { timeout: 3_000 });
+    await expect(page.locator('.dropdown-portal .dp-item').first()).toBeVisible();
+    const histPanelItems = await page.locator('.dropdown-portal .dp-item').allTextContents();
     expect(histPanelItems.length).toBeGreaterThan(0);
     expect(histPanelItems[0]).toBe('level:ERROR');
 
-    await page.evaluate(() => {
-      document.querySelector('.query-panel-item')?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-    });
+    // Click first history item to load it into search input
+    await page.locator('.dropdown-portal .dp-item').first().click();
     await expect(searchInput).toHaveValue('level:ERROR');
 
     // Star/unstar persistence.

@@ -5,213 +5,676 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Peek - Log Viewer</title>
     <style>
+        /* ─── Design Tokens ─────────────────────────────────── */
+        :root {
+            --background: #0f1117;
+            --foreground: #e2e4e9;
+            --card: #1a1d23;
+            --card-foreground: #e2e4e9;
+            --primary: #4ade80;
+            --primary-foreground: #0f1117;
+            --secondary: #262a33;
+            --secondary-foreground: #c4c7cc;
+            --muted: #1e2128;
+            --muted-foreground: #7c8091;
+            --border: #2a2e38;
+            --input: #262a33;
+            --ring: #4ade80;
+            --radius: 0.5rem;
+            --destructive: #ef4444;
+
+            --peek-surface-0: #0f1117;
+            --peek-surface-1: #161920;
+            --peek-surface-2: #1a1d23;
+            --peek-surface-3: #262a33;
+            --peek-green: #4ade80;
+            --peek-green-dim: #22c55e;
+            --peek-red: #ef4444;
+            --peek-amber: #f59e0b;
+            --peek-blue: #38bdf8;
+            --peek-gray: #6b7280;
+            --peek-dim: #4b5060;
+
+            /* Level badge colors — dark */
+            --level-error-bg: rgba(239,68,68,0.15);
+            --level-error-fg: #ef4444;
+            --level-error-border: rgba(239,68,68,0.25);
+            --level-warn-bg: rgba(245,158,11,0.15);
+            --level-warn-fg: #f59e0b;
+            --level-warn-border: rgba(245,158,11,0.25);
+            --level-info-bg: rgba(56,189,248,0.15);
+            --level-info-fg: #38bdf8;
+            --level-info-border: rgba(56,189,248,0.25);
+            --level-debug-bg: rgba(107,114,128,0.15);
+            --level-debug-fg: #6b7280;
+            --level-debug-border: rgba(107,114,128,0.25);
+            --level-trace-bg: rgba(75,80,96,0.15);
+            --level-trace-fg: #4b5060;
+            --level-trace-border: rgba(75,80,96,0.25);
+
+            --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --font-mono: ui-monospace, 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Courier New', monospace;
+
+            /* Density — default */
+            --row-py: 0.375rem;
+            --row-px: 0.75rem;
+            --row-font-size: 0.875rem;
+            --header-py: 0.5rem;
+            --header-px: 0.75rem;
+            --search-height: 2.5rem;
+            --search-font-size: 0.875rem;
+            --header-bar-py: 0.625rem;
+            --header-bar-px: 1.25rem;
+            --title-size: 1.2rem;
+            --button-height: 34px;
+            --detail-py: 0.25rem;
+            --detail-px: 0.75rem;
+            --detail-font-size: 0.825rem;
+            --badge-px: 0.375rem;
+            --badge-py: 0.125rem;
+            --badge-font-size: 0.7rem;
+            --header-gap: 0.625rem;
+            --stats-py: 0.375rem;
+            --stats-px: 1rem;
+        }
+
+        .density-compact {
+            --row-py: 2px;
+            --row-px: 0.5rem;
+            --row-font-size: 0.8rem;
+            --header-py: 0.25rem;
+            --header-px: 0.5rem;
+            --search-height: 2rem;
+            --search-font-size: 0.8rem;
+            --header-bar-py: 0.375rem;
+            --header-bar-px: 1rem;
+            --title-size: 1rem;
+            --button-height: 28px;
+            --detail-py: 2px;
+            --detail-px: 0.5rem;
+            --detail-font-size: 0.75rem;
+            --badge-px: 0.25rem;
+            --badge-py: 1px;
+            --badge-font-size: 0.65rem;
+            --header-gap: 0.375rem;
+            --stats-py: 0.25rem;
+            --stats-px: 0.75rem;
+        }
+
+        .density-comfortable {
+            --row-py: 0.625rem;
+            --row-px: 1rem;
+            --row-font-size: 0.95rem;
+            --header-py: 0.75rem;
+            --header-px: 1rem;
+            --search-height: 3rem;
+            --search-font-size: 0.95rem;
+            --header-bar-py: 0.875rem;
+            --header-bar-px: 1.5rem;
+            --title-size: 1.4rem;
+            --button-height: 40px;
+            --detail-py: 0.5rem;
+            --detail-px: 0.75rem;
+            --detail-font-size: 0.9rem;
+            --badge-px: 0.5rem;
+            --badge-py: 3px;
+            --badge-font-size: 0.75rem;
+            --header-gap: 0.875rem;
+            --stats-py: 0.625rem;
+            --stats-px: 1.25rem;
+        }
+
+        /* Light theme */
+        .light {
+            --background: #f5f6f8;
+            --foreground: #1a1d23;
+            --card: #ffffff;
+            --card-foreground: #1a1d23;
+            --primary: #16a34a;
+            --primary-foreground: #ffffff;
+            --secondary: #f0f1f4;
+            --secondary-foreground: #374151;
+            --muted: #f0f1f4;
+            --muted-foreground: #6b7280;
+            --border: #e2e4e9;
+            --input: #f0f1f4;
+            --ring: #16a34a;
+            --destructive: #ef4444;
+
+            --peek-surface-0: #f5f6f8;
+            --peek-surface-1: #ffffff;
+            --peek-surface-2: #f0f1f4;
+            --peek-surface-3: #e8eaef;
+            --peek-green: #16a34a;
+            --peek-green-dim: #15803d;
+            --peek-red: #ef4444;
+            --peek-amber: #d97706;
+            --peek-blue: #2563eb;
+            --peek-gray: #9ca3af;
+            --peek-dim: #d1d5db;
+
+            --level-error-bg: #fef2f2;
+            --level-error-fg: #ef4444;
+            --level-error-border: #fecaca;
+            --level-warn-bg: #fffbeb;
+            --level-warn-fg: #d97706;
+            --level-warn-border: #fde68a;
+            --level-info-bg: #eff6ff;
+            --level-info-fg: #2563eb;
+            --level-info-border: #bfdbfe;
+            --level-debug-bg: #f3f4f6;
+            --level-debug-fg: #9ca3af;
+            --level-debug-border: #e5e7eb;
+            --level-trace-bg: #f9fafb;
+            --level-trace-fg: #d1d5db;
+            --level-trace-border: #f3f4f6;
+
+            color-scheme: light;
+        }
+
+        /* ─── Animations ────────────────────────────────────── */
+        @keyframes fadeInRow {
+            from { opacity: 0; transform: translateY(-2px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes expandDetail {
+            from { opacity: 0; max-height: 0; }
+            to   { opacity: 1; max-height: 600px; }
+        }
+        @keyframes slideInUp {
+            from { opacity: 0; transform: translateY(8px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ─── Base ──────────────────────────────────────────── */
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
+        html {
+            transition: background-color 0.2s ease, color 0.2s ease;
+            color-scheme: dark;
+        }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: #1a1a1a;
-            color: #e0e0e0;
+            font-family: var(--font-sans);
+            background: var(--background);
+            color: var(--foreground);
             height: 100vh;
             display: flex;
             flex-direction: column;
+            transition: background-color 0.2s ease, color 0.2s ease;
         }
 
-        header {
-            background: #2d2d2d;
-            padding: 1rem 2rem;
-            border-bottom: 2px solid #3d3d3d;
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: var(--peek-surface-0); }
+        ::-webkit-scrollbar-thumb { background: var(--peek-surface-3); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--peek-dim); }
+
+        /* ─── Header ────────────────────────────────────────── */
+        .peek-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: var(--header-bar-py) var(--header-bar-px);
+            background: var(--peek-surface-1);
+            border-bottom: 1px solid var(--border);
+            transition: background-color 0.2s ease, border-color 0.2s ease;
         }
 
-        h1 { font-size: 1.75rem; color: #4CAF50; margin-bottom: 1rem; }
+        .peek-header-left,
+        .peek-header-right {
+            display: flex;
+            align-items: center;
+            gap: var(--header-gap);
+        }
 
-        .search-bar { display: flex; gap: 0.5rem; }
+        .peek-logo {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
 
-        /* Search editor: transparent input over syntax-highlighted backdrop */
+        .peek-logo svg { color: var(--peek-green); flex-shrink: 0; }
+
+        .peek-logo-title {
+            font-size: var(--title-size);
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            color: var(--foreground);
+        }
+
+        .peek-conn {
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+        }
+
+        .peek-conn-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .peek-conn-dot.connected {
+            background: var(--peek-green);
+            box-shadow: 0 0 6px var(--peek-green);
+        }
+
+        .peek-conn-dot.disconnected {
+            background: var(--peek-red);
+            box-shadow: 0 0 6px var(--peek-red);
+        }
+
+        .peek-conn-label {
+            font-size: 0.75rem;
+            color: var(--muted-foreground);
+            white-space: nowrap;
+        }
+
+        .peek-records {
+            font-size: 0.75rem;
+            color: var(--muted-foreground);
+            font-family: var(--font-mono);
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Density pill */
+        .density-pill {
+            display: flex;
+            align-items: center;
+            background: var(--peek-surface-2);
+            border: 1px solid var(--border);
+            border-radius: calc(var(--radius) - 2px);
+            overflow: hidden;
+        }
+
+        .density-pill button {
+            padding: 0.375rem 0.5rem;
+            background: transparent;
+            border: none;
+            color: var(--muted-foreground);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.15s, background 0.15s;
+            line-height: 1;
+        }
+
+        .density-pill button:hover {
+            color: var(--foreground);
+            background: var(--peek-surface-2);
+        }
+
+        .density-pill button.active {
+            color: var(--peek-green);
+            background: var(--peek-surface-3);
+        }
+
+        /* Icon buttons (theme, settings, star, history, etc.) */
+        .icon-btn {
+            padding: 0.375rem;
+            background: transparent;
+            border: none;
+            border-radius: calc(var(--radius) - 2px);
+            color: var(--muted-foreground);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.15s, background 0.15s;
+            line-height: 1;
+        }
+
+        .icon-btn:hover {
+            color: var(--foreground);
+            background: var(--peek-surface-3);
+        }
+
+        .icon-btn.starred { color: var(--peek-amber); }
+        .icon-btn.starred:hover { color: var(--peek-amber); }
+
+        /* ─── Search Bar ────────────────────────────────────── */
+        .peek-search-bar {
+            display: flex;
+            flex-direction: column;
+            background: var(--peek-surface-0);
+            border-bottom: 1px solid var(--border);
+            transition: background-color 0.2s ease, border-color 0.2s ease;
+        }
+
+        .peek-search-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+        }
+
         .search-editor {
             position: relative;
             flex: 1;
             box-sizing: border-box;
         }
 
+        .search-input-wrapper {
+            display: flex;
+            align-items: center;
+            background: var(--peek-surface-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 0 0.75rem;
+            height: var(--search-height);
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+
+        .search-input-wrapper:focus-within {
+            border-color: rgba(74,222,128,0.5);
+            box-shadow: 0 0 0 1px rgba(74,222,128,0.12);
+        }
+
+        .search-input-wrapper .search-icon {
+            color: var(--muted-foreground);
+            flex-shrink: 0;
+            margin-right: 0.5rem;
+        }
+
+        .search-input-inner {
+            position: relative;
+            flex: 1;
+            min-width: 0;
+            height: 100%;
+            display: flex;
+            align-items: center;
+        }
+
         .search-editor-input {
             position: relative;
             z-index: 1;
             width: 100%;
-            padding: 0.75rem;
+            height: 100%;
+            padding: 0;
             background: transparent;
-            border: 1px solid #4d4d4d;
+            border: none;
             color: transparent;
-            caret-color: #e0e0e0;
-            border-radius: 4px;
-            font-family: ui-monospace, 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Courier New', monospace;
-            font-size: 1.1rem;
+            caret-color: var(--peek-green);
+            font-family: var(--font-mono);
+            font-size: var(--search-font-size);
             line-height: 1.4;
             box-sizing: border-box;
         }
 
-        .search-editor-input:focus { outline: none; border-color: #4CAF50; }
+        .search-editor-input:focus { outline: none; }
+
+        .search-editor-input::placeholder { color: var(--peek-dim); }
 
         .search-highlight {
             position: absolute;
             inset: 0;
-            padding: 0.75rem;
-            background: #1a1a1a;
-            border: 1px solid transparent;
-            border-radius: 4px;
-            font-family: ui-monospace, 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Courier New', monospace;
-            font-size: 1.1rem;
+            padding: 0;
+            background: transparent;
+            border: none;
+            font-family: var(--font-mono);
+            font-size: var(--search-font-size);
             line-height: 1.4;
             white-space: pre;
             overflow: hidden;
             pointer-events: none;
-            display: block;
-            color: #e0e0e0;
+            display: flex;
+            align-items: center;
+            color: var(--foreground);
             box-sizing: border-box;
         }
 
+        .search-clear-btn {
+            padding: 2px;
+            margin-left: 0.25rem;
+            background: transparent;
+            border: none;
+            border-radius: calc(var(--radius) - 2px);
+            color: var(--muted-foreground);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            line-height: 1;
+            transition: color 0.15s, background 0.15s;
+        }
+
+        .search-clear-btn:hover {
+            color: var(--foreground);
+            background: var(--peek-surface-3);
+        }
+
         /* Syntax highlight token colors */
-        .hl-op       { color: #ff9800; font-weight: bold; }
-        .hl-field    { color: #26c6da; }
-        .hl-colon    { color: #888; }
-        .hl-quote    { color: #ffb74d; }
-        .hl-wildcard { color: #ce93d8; }
-        .hl-range    { color: #66bb6a; }
-        .hl-paren    { color: #9e9e9e; }
-        .hl-error    { color: #ef5350; text-decoration: underline wavy #ef5350; }
+        .hl-op       { color: var(--peek-amber); font-weight: bold; }
+        .hl-field    { color: var(--peek-blue); }
+        .hl-colon    { color: var(--muted-foreground); }
+        .hl-quote    { color: var(--peek-green); }
+        .hl-wildcard { color: var(--peek-amber); font-style: italic; }
+        .hl-range    { color: var(--peek-green); }
+        .hl-paren    { color: var(--muted-foreground); }
+        .hl-error    { color: var(--peek-red); text-decoration: underline wavy var(--peek-red); }
 
         /* Autocomplete dropdown */
         .search-autocomplete {
             position: absolute;
-            top: calc(100% + 2px);
+            top: calc(100% + 4px);
             left: 0;
             right: 0;
-            background: #2a2a2a;
-            border: 1px solid #4d4d4d;
-            border-radius: 4px;
+            background: var(--peek-surface-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
             z-index: 1000;
             max-height: 200px;
             overflow-y: auto;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            padding: 0.25rem 0;
         }
 
         .search-autocomplete-item {
-            padding: 0.4rem 0.75rem;
+            padding: 0.5rem 0.75rem;
             cursor: pointer;
-            color: #ccc;
-            font-family: ui-monospace, 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Courier New', monospace;
-            font-size: 0.95rem;
+            color: var(--secondary-foreground);
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: background 0.1s, color 0.1s;
         }
 
         .search-autocomplete-item:hover,
         .search-autocomplete-item.selected {
-            background: #3d3d3d;
-            color: #4CAF50;
+            background: var(--peek-surface-3);
+            color: var(--peek-green);
         }
 
-        button {
-            padding: 0.75rem 1.5rem;
-            background: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 1.1rem;
-            transition: background 0.2s;
+        .search-autocomplete-item .ac-kind {
+            font-size: 0.625rem;
+            color: var(--muted-foreground);
+            margin-left: 0.75rem;
+            flex-shrink: 0;
         }
 
-        button:hover { background: #45a049; }
-        button:disabled { background: #666; cursor: not-allowed; }
-
-        .clear-btn {
-            padding: 0.75rem 1rem;
-            background: #333;
-            color: #888;
-            border: 1px solid #4d4d4d;
-            border-radius: 4px;
+        /* Time range button */
+        .time-range-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+            padding: 0 0.75rem;
+            height: var(--button-height);
+            background: var(--peek-surface-2);
+            border: 1px solid var(--border);
+            border-radius: calc(var(--radius) - 2px);
+            color: var(--secondary-foreground);
+            font-size: 0.75rem;
             cursor: pointer;
-            font-size: 1.35rem;
+            white-space: nowrap;
+            transition: border-color 0.15s;
             line-height: 1;
-            transition: color 0.2s;
         }
 
-        .clear-btn:hover { color: #ef5350; }
+        .time-range-btn:hover { border-color: rgba(74,222,128,0.4); }
 
-        /* Datetime range picker */
-        .time-range-picker {
+        .time-range-btn svg { color: var(--muted-foreground); }
+
+        /* Custom range row */
+        .time-custom-row {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            margin-top: 0.4rem;
-            flex-wrap: wrap;
+            gap: 0.75rem;
+            padding: 0 1rem 0.625rem;
         }
 
-        .time-preset-select {
-            padding: 0.35rem 0.6rem;
-            background: #2a2a2a;
-            color: #ccc;
-            border: 1px solid #4d4d4d;
-            border-radius: 4px;
-            font-size: 0.9rem;
-            cursor: pointer;
-        }
-
-        .time-preset-select:focus { outline: none; border-color: #4CAF50; }
-
-        .time-custom-range {
-            display: flex;
-            align-items: center;
-            gap: 0.4rem;
-            flex-wrap: wrap;
-        }
-
-        .time-custom-range span {
-            color: #888;
-            font-size: 0.85rem;
+        .time-custom-row label {
+            font-size: 0.75rem;
+            color: var(--muted-foreground);
+            white-space: nowrap;
         }
 
         .time-custom-input {
-            padding: 0.3rem 0.5rem;
-            background: #2a2a2a;
-            color: #ccc;
-            border: 1px solid #4d4d4d;
-            border-radius: 4px;
-            font-size: 0.85rem;
-            color-scheme: dark;
+            height: 2rem;
+            padding: 0 0.5rem;
+            background: var(--peek-surface-2);
+            color: var(--foreground);
+            border: 1px solid var(--border);
+            border-radius: calc(var(--radius) - 2px);
+            font-size: 0.75rem;
+            font-family: var(--font-mono);
+            transition: border-color 0.15s;
         }
 
-        .time-custom-input:focus { outline: none; border-color: #4CAF50; }
+        .time-custom-input:focus { outline: none; border-color: var(--peek-green); }
 
+        .light .time-custom-input { color-scheme: light; }
+
+        .time-apply-btn {
+            height: 2rem;
+            padding: 0 0.75rem;
+            background: rgba(74,222,128,0.1);
+            border: 1px solid rgba(74,222,128,0.3);
+            border-radius: calc(var(--radius) - 2px);
+            color: var(--peek-green);
+            font-size: 0.75rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.15s;
+            line-height: 1;
+        }
+
+        .time-apply-btn:hover { background: rgba(74,222,128,0.2); }
+
+        /* ─── Dropdown portal ───────────────────────────────── */
+        .dropdown-portal {
+            position: fixed;
+            z-index: 9000;
+            background: var(--peek-surface-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            min-width: 160px;
+            overflow-y: auto;
+            max-height: 340px;
+            animation: slideInUp 0.15s ease-out;
+        }
+
+        .dropdown-portal .dp-section-label {
+            padding: 0.375rem 0.75rem 0.25rem;
+            font-size: 0.625rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--muted-foreground);
+            font-weight: 600;
+        }
+
+        .dropdown-portal .dp-divider {
+            margin: 0.25rem 0;
+            border-top: 1px solid var(--border);
+        }
+
+        .dropdown-portal .dp-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            cursor: pointer;
+            color: var(--secondary-foreground);
+            font-size: 0.8125rem;
+            white-space: nowrap;
+            transition: background 0.1s, color 0.1s;
+            border: none;
+            background: transparent;
+            width: 100%;
+            text-align: left;
+            font-family: inherit;
+        }
+
+        .dropdown-portal .dp-item:hover {
+            background: var(--peek-surface-3);
+        }
+
+        .dropdown-portal .dp-item.active {
+            color: var(--peek-green);
+        }
+
+        .dropdown-portal .dp-item.starred-item {
+            color: var(--peek-amber);
+        }
+
+        .dropdown-portal .dp-item .dp-item-text {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+        }
+
+        .dropdown-portal .dp-item .dp-item-copy {
+            padding: 2px 6px;
+            background: transparent;
+            color: var(--peek-dim);
+            border: 1px solid var(--peek-surface-3);
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.7rem;
+            flex-shrink: 0;
+            line-height: 1.3;
+            display: flex;
+            align-items: center;
+            transition: color 0.15s, border-color 0.15s;
+        }
+
+        .dropdown-portal .dp-item .dp-item-copy:hover {
+            color: var(--foreground);
+            border-color: var(--muted-foreground);
+        }
+
+        .dropdown-portal .dp-empty {
+            padding: 1rem;
+            text-align: center;
+            color: var(--peek-dim);
+            font-size: 0.8rem;
+        }
+
+        /* ─── Main ──────────────────────────────────────────── */
         main {
             flex: 1;
             overflow: hidden;
-            padding: 1rem 2rem;
             display: flex;
             flex-direction: column;
         }
 
-        .stats {
-            display: flex;
-            gap: 0.75rem;
-            margin-top: 0.4rem;
-            font-size: 0.8rem;
-            color: #666;
-        }
-
-        .stats span {
-            padding: 0.1rem 0.5rem;
-        }
-
+        /* ─── Log Table ─────────────────────────────────────── */
         .log-container {
             flex: 1;
             overflow-y: auto;
             overflow-x: auto;
-            background: #2d2d2d;
-            border-radius: 4px;
-            border: 1px solid #3d3d3d;
-            overflow-anchor: none;  /* Prevent scroll anchoring which resets position */
+            background: var(--peek-surface-0);
+            overflow-anchor: none;
         }
 
         .table-wrapper {
@@ -220,11 +683,10 @@
 
         .log-table {
             display: grid;
-            /* grid-template-columns set dynamically in JS */
             width: max-content;
             min-width: 100%;
-            font-family: ui-monospace, 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Courier New', monospace;
-            font-size: 0.95rem;
+            font-family: var(--font-mono);
+            font-size: var(--row-font-size);
             line-height: 1.5;
             grid-auto-rows: auto;
         }
@@ -243,20 +705,24 @@
         }
 
         .log-table-header > div {
-            background: #333;
-            color: #888;
-            font-weight: normal;
-            font-size: 0.85rem;
+            background: var(--peek-surface-1);
+            color: var(--muted-foreground);
+            font-weight: 600;
+            font-size: 0.6875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
             text-align: left;
-            padding: 0.3rem 0.5rem;
+            padding: var(--header-py) var(--header-px);
             white-space: nowrap;
             overflow: visible;
-            border-bottom: 2px solid #555;
+            border-bottom: 1px solid var(--border);
+            transition: background-color 0.2s ease, border-color 0.2s ease;
         }
 
         .log-table-header .col-pinned {
             user-select: none;
             cursor: grab;
+            color: var(--peek-green);
         }
 
         .log-table-header .col-pinned.dragging {
@@ -264,46 +730,62 @@
         }
 
         .log-table-header .col-pinned.drag-over {
-            border-left: 2px solid #4CAF50;
+            border-left: 2px solid var(--peek-green);
         }
 
         .col-remove-hdr {
-            color: #555;
+            color: var(--muted-foreground);
             margin-left: 0.5ch;
             font-size: 0.75rem;
             cursor: pointer;
             padding: 0 0.3ch;
             border-radius: 2px;
             vertical-align: middle;
+            display: inline-flex;
+            align-items: center;
         }
 
         .col-remove-hdr:hover {
-            color: #ef5350;
+            color: var(--peek-red);
             background: rgba(239, 83, 80, 0.15);
         }
 
         .resize-handle {
             position: absolute;
-            right: -3px;
+            right: 0;
             top: 0;
             bottom: 0;
-            width: 7px;
+            width: 16px;
             cursor: col-resize;
-            background: rgba(76, 175, 80, 0.15);
             z-index: 2;
-            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        .resize-handle:hover,
-        .resize-handle.active { background: #4CAF50; }
+        .resize-handle::after {
+            content: '';
+            width: 1px;
+            height: 60%;
+            background: var(--border);
+            border-radius: 1px;
+            transition: height 0.1s, background 0.1s;
+        }
 
+        .resize-handle:hover::after,
+        .resize-handle.active::after {
+            height: 100%;
+            background: var(--peek-green);
+        }
+
+        /* ─── Log Rows ──────────────────────────────────────── */
         .log-row {
             display: contents;
         }
 
         .log-row > div {
-            padding: 0.25rem 0.5rem;
-            border-bottom: 1px solid #2a2a2a;
+            padding: var(--row-py) var(--row-px);
+            border-bottom: 1px solid var(--border);
             vertical-align: top;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -312,200 +794,249 @@
             transition: background 0.1s;
         }
 
-        .log-row:hover > div { background: #2a2a2a; }
+        .log-row:hover > div { background: rgba(26,29,35,0.6); }
+        .light .log-row:hover > div { background: rgba(240,241,244,0.6); }
+
+        .log-row.expanded > div { background: var(--peek-surface-2); }
+
+        .log-row.new > div { animation: fadeInRow 0.2s ease-out; }
 
         .detail-row {
             grid-column: 1 / -1;
-            padding: 0.35rem 0.5rem 0.5rem 2.5ch;
-            background: #1a1a1a;
-            border-bottom: 1px solid #2a2a2a;
-            font-size: 0.9rem;
-            color: #999;
-            white-space: pre-wrap;
-            word-break: break-all;
+            background: var(--peek-surface-1);
+            border-bottom: 1px solid var(--border);
+            border-top: 1px solid var(--border);
+            overflow: hidden;
             display: none;
+            transition: background-color 0.2s ease, border-color 0.2s ease;
         }
 
-        .detail-row.visible { display: block; }
-        .pinned-val { color: #777; }
-
-        .log-chevron {
-            display: inline-block;
-            width: 1.2ch;
-            color: #555;
-            transition: transform 0.15s;
+        .detail-row.visible {
+            display: block;
+            animation: expandDetail 0.25s ease-out forwards;
         }
 
-        .log-timestamp { color: #6a6a6a; }
+        .pinned-val { color: var(--muted-foreground); }
 
-        .log-level {
-            display: inline-block;
-            min-width: 5ch;
-            font-weight: bold;
-        }
-
-        .level-ERROR, .level-FATAL { color: #ef5350; }
-        .level-WARN, .level-WARNING { color: #ffa726; }
-        .level-INFO { color: #42a5f5; }
-        .level-DEBUG { color: #616161; }
-        .level-TRACE { color: #424242; }
-        .level-NONE { color: #757575; }
-        .log-message { color: #c8c8c8; }
-
-        .fields-table {
-            border-collapse: collapse;
-            margin-top: 0.25rem;
-            width: auto;
-            table-layout: auto;
-            font-family: ui-monospace, 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Courier New', monospace;
-            font-size: 0.9rem;
-        }
-
-        .fields-table td {
-            padding: 0.15rem 0.5rem 0.15rem 0;
-            vertical-align: top;
-            border: none;
-        }
-
-        .fields-table .field-key {
-            color: #888;
-            white-space: nowrap;
-            width: 1%;
-            cursor: pointer;
-            text-decoration: underline;
-            text-decoration-style: dotted;
-            text-underline-offset: 2px;
-        }
-
-        .fields-table .field-key:hover { color: #4CAF50; }
-
-        .fields-table .field-val {
-            color: #4CAF50;
-            word-break: break-all;
-            cursor: pointer;
-        }
-
-        .fields-table .field-val:hover { text-decoration: underline; }
-
-        .status {
-            margin-top: 0.5rem;
-            padding: 0.5rem;
-            text-align: center;
-            color: #888;
-            font-size: 1rem;
-        }
-
-        .status.connected { color: #4CAF50; }
-        .status.error { color: #d32f2f; }
-
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .log-row.new td { animation: fadeIn 0.3s; }
-
-        /* Query history & starred panels */
-        .query-panel-wrapper {
-            position: relative;
-        }
-
-        .query-panel-btn {
-            padding: 0.75rem 1rem;
-            background: #333;
-            color: #ccc;
-            border: 1px solid #4d4d4d;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            white-space: nowrap;
-        }
-
-        .query-panel-btn:hover { background: #3d3d3d; color: #e0e0e0; }
-
-        .query-panel {
-            position: absolute;
-            top: calc(100% + 4px);
-            right: 0;
-            min-width: 300px;
-            max-width: 480px;
-            background: #2a2a2a;
-            border: 1px solid #4d4d4d;
-            border-radius: 4px;
-            z-index: 2000;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.5);
-            max-height: 300px;
-            overflow-y: auto;
-        }
-
-        .query-panel-empty {
-            padding: 1rem;
-            text-align: center;
-            color: #555;
-            font-size: 0.85rem;
-        }
-
-        .query-panel-item {
+        /* Chevron */
+        .col-chevron {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            padding: 0.4rem 0.75rem;
-            cursor: pointer;
-            border-bottom: 1px solid #333;
+            justify-content: center;
         }
 
-        .query-panel-item:hover { background: #3d3d3d; }
+        .col-chevron svg { transition: color 0.15s; }
 
-        .query-panel-item .qp-text {
-            flex: 1;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            color: #4CAF50;
-            font-family: ui-monospace, 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', 'Courier New', monospace;
-            font-size: 0.9rem;
+        .col-chevron.expanded svg { color: var(--peek-green); }
+        .col-chevron:not(.expanded) svg { color: var(--muted-foreground); }
+
+        .log-timestamp, .col-time {
+            color: var(--peek-dim);
+            font-variant-numeric: tabular-nums;
         }
 
-        .query-panel-item .qp-copy {
-            padding: 0.15rem 0.4rem;
-            background: transparent;
-            color: #666;
-            border: 1px solid #555;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 0.8rem;
-            flex-shrink: 0;
-            line-height: 1.3;
-        }
-
-        .query-panel-item .qp-copy:hover { color: #ccc; background: transparent; border-color: #888; }
-
-        .star-btn {
-            padding: 0.75rem 0.9rem;
-            background: #333;
-            color: #777;
-            border: 1px solid #4d4d4d;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 1rem;
+        /* Level badges */
+        .log-level, .level-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: var(--badge-py) var(--badge-px);
+            border-radius: 0.25rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-size: var(--badge-font-size);
             line-height: 1;
-            transition: color 0.2s;
         }
 
-        .star-btn:hover { color: #ffd700; background: #333; }
-        .star-btn.starred { color: #ffd700; border-color: #888; }
-
-        /* Copy buttons */
-        .copy-btn {
-            padding: 0 0.3rem;
+        .level-ERROR, .level-FATAL {
+            background: var(--level-error-bg);
+            color: var(--level-error-fg);
+            border: 1px solid var(--level-error-border);
+        }
+        .level-WARN, .level-WARNING {
+            background: var(--level-warn-bg);
+            color: var(--level-warn-fg);
+            border: 1px solid var(--level-warn-border);
+        }
+        .level-INFO {
+            background: var(--level-info-bg);
+            color: var(--level-info-fg);
+            border: 1px solid var(--level-info-border);
+        }
+        .level-DEBUG {
+            background: var(--level-debug-bg);
+            color: var(--level-debug-fg);
+            border: 1px solid var(--level-debug-border);
+        }
+        .level-TRACE {
+            background: var(--level-trace-bg);
+            color: var(--level-trace-fg);
+            border: 1px solid var(--level-trace-border);
+        }
+        .level-NONE {
+            color: var(--muted-foreground);
             background: transparent;
-            color: #555;
             border: 1px solid transparent;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 0.8rem;
-            line-height: 1.4;
-            transition: color 0.15s, border-color 0.15s;
         }
-        .copy-btn:hover { color: #ccc; border-color: #555; background: transparent; }
 
-        /* Row-level copy button (overlaid inside .col-msg) */
+        .log-message, .col-msg-text { color: var(--secondary-foreground); }
+
+        /* ─── Detail Panel (CSS Grid) ───────────────────────── */
+        .fields-grid {
+            display: grid;
+            grid-template-columns: 180px 1fr;
+            gap: 0 1rem;
+            padding: 0.75rem 1.5rem;
+            font-family: var(--font-mono);
+            font-size: var(--detail-font-size);
+        }
+
+        .fields-grid .field-key {
+            padding: var(--detail-py) var(--detail-px);
+            color: var(--muted-foreground);
+            white-space: nowrap;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+            border-bottom: 1px dotted rgba(75,80,96,0.3);
+            transition: color 0.15s;
+        }
+
+        .fields-grid .field-key:hover { color: var(--peek-green); }
+        .fields-grid .field-key.pinned { color: var(--peek-green); cursor: default; }
+
+        .fields-grid .field-key .pin-icon {
+            flex-shrink: 0;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+
+        .fields-grid .field-key:hover .pin-icon,
+        .fields-grid .field-key.pinned .pin-icon {
+            opacity: 1;
+        }
+
+        .fields-grid .field-val-cell {
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+            padding: var(--detail-py) var(--detail-px);
+            min-width: 0;
+        }
+
+        .fields-grid .field-val {
+            color: var(--peek-green);
+            word-break: break-all;
+            cursor: pointer;
+            font-family: var(--font-mono);
+            font-size: var(--detail-font-size);
+        }
+
+        .fields-grid .field-val:hover { text-decoration: underline; }
+
+        .fields-grid .field-val.stack-trace {
+            white-space: pre-wrap;
+            color: rgba(239,68,68,0.8);
+            font-size: 0.6875rem;
+            line-height: 1.5;
+        }
+
+        .fields-grid .field-copy-btn {
+            opacity: 0;
+            transition: opacity 0.15s;
+            flex-shrink: 0;
+        }
+
+        .fields-grid .field-val-cell:hover .field-copy-btn {
+            opacity: 1;
+        }
+
+        /* ─── Status Bar ────────────────────────────────────── */
+        .stats-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: var(--stats-py) var(--stats-px);
+            background: var(--peek-surface-1);
+            border-top: 1px solid var(--border);
+            font-size: 0.6875rem;
+            color: var(--muted-foreground);
+            user-select: none;
+            transition: background-color 0.2s ease, border-color 0.2s ease;
+        }
+
+        .stats-bar-left {
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+        }
+
+        .stats-bar-right {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .stats-bar-right .ws-status {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .stats-bar-right .ws-status svg.connected { color: var(--peek-green); }
+        .stats-bar-right .ws-status svg.disconnected { color: var(--peek-red); }
+        .stats-bar-right .ws-status svg.error { color: var(--peek-red); }
+
+        .stats-bar-right .record-count {
+            font-family: var(--font-mono);
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Auto-scroll checkbox */
+        .auto-scroll-label {
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+            cursor: pointer;
+        }
+
+        .auto-scroll-label input[type="checkbox"] {
+            width: 12px;
+            height: 12px;
+            accent-color: var(--peek-green);
+            cursor: pointer;
+            border-radius: 2px;
+        }
+
+        /* ─── Status line ───────────────────────────────────── */
+        .status {
+            padding: 0.5rem;
+            text-align: center;
+            color: var(--muted-foreground);
+            font-size: 0.875rem;
+        }
+
+        .status.connected { color: var(--peek-green); }
+        .status.error { color: var(--peek-red); }
+
+        /* ─── Copy buttons ──────────────────────────────────── */
+        .copy-btn {
+            padding: 0.25rem;
+            background: transparent;
+            color: var(--muted-foreground);
+            border: none;
+            border-radius: calc(var(--radius) - 2px);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            transition: color 0.15s, background 0.15s;
+            line-height: 1;
+        }
+        .copy-btn:hover { color: var(--foreground); background: var(--peek-surface-3); }
+
+        /* Row-level copy button */
         .log-row > .col-msg {
             position: relative;
             overflow: visible;
@@ -533,53 +1064,32 @@
             pointer-events: auto;
         }
 
-        /* Field-value copy button */
-        .field-copy-cell {
-            padding-left: 0.25rem;
-            vertical-align: top;
-        }
-        .field-copy-btn {
-            opacity: 0;
-            transition: opacity 0.15s;
-            pointer-events: none;
-        }
-        .fields-table tr:hover .field-copy-btn {
-            opacity: 1;
-            pointer-events: auto;
-        }
-
-        /* Toast notification */
+        /* ─── Toast ─────────────────────────────────────────── */
         .toast {
             position: fixed;
-            bottom: 2rem;
-            right: 2rem;
-            background: #333;
-            color: #e0e0e0;
-            padding: 0.4rem 0.9rem;
-            border-radius: 4px;
-            font-size: 0.85rem;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            background: var(--peek-surface-2);
+            color: var(--foreground);
+            padding: 0.5rem 0.75rem;
+            border-radius: var(--radius);
+            font-size: 0.8125rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
             opacity: 0;
-            transform: translateY(6px);
+            transform: translateY(8px);
             transition: opacity 0.2s, transform 0.2s;
             pointer-events: none;
             z-index: 9999;
-            border: 1px solid #4d4d4d;
+            border: 1px solid rgba(74,222,128,0.3);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3), 0 0 0 1px rgba(74,222,128,0.05);
         }
         .toast.visible {
             opacity: 1;
             transform: translateY(0);
         }
-
-        .reset-prefs-btn {
-            padding: 0.35rem 0.6rem;
-            background: #2a2a2a;
-            color: #666;
-            border: 1px solid #4d4d4d;
-            border-radius: 4px;
-            font-size: 0.85rem;
-            cursor: pointer;
-        }
-        .reset-prefs-btn:hover { color: #ef5350; background: #2a2a2a; }
+        .toast .toast-icon { color: var(--peek-green); display: flex; align-items: center; }
     </style>
 </head>
 <body>
@@ -589,8 +1099,41 @@
         // ──────────────────────────────────────────
         import van from "/van.min.js"
 
-        const {div, h1, header: hdr, main: mn, input, button, span, label, strong,
-               table, thead, tbody, tr, td, th, br, select: sel, option} = van.tags
+        const {div, header: hdr, main: mn, input, button, span, label,
+               br} = van.tags
+
+        // ──────────────────────────────────────────
+        // Icon Registry — inline SVGs from Lucide
+        // ──────────────────────────────────────────
+        const ICONS = {
+            eye: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>',
+            search: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
+            x: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>',
+            star: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a.53.53 0 0 0 .4.29l5.16.756a.53.53 0 0 1 .294.904l-3.733 3.638a.53.53 0 0 0-.152.469l.882 5.139a.53.53 0 0 1-.77.56l-4.612-2.425a.53.53 0 0 0-.494 0L7.144 18.73a.53.53 0 0 1-.77-.56l.882-5.139a.53.53 0 0 0-.152-.469L3.37 8.924a.53.53 0 0 1 .294-.904l5.16-.756a.53.53 0 0 0 .4-.29z"/></svg>',
+            starFilled: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a.53.53 0 0 0 .4.29l5.16.756a.53.53 0 0 1 .294.904l-3.733 3.638a.53.53 0 0 0-.152.469l.882 5.139a.53.53 0 0 1-.77.56l-4.612-2.425a.53.53 0 0 0-.494 0L7.144 18.73a.53.53 0 0 1-.77-.56l.882-5.139a.53.53 0 0 0-.152-.469L3.37 8.924a.53.53 0 0 1 .294-.904l5.16-.756a.53.53 0 0 0 .4-.29z"/></svg>',
+            history: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>',
+            chevronRight: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>',
+            chevronDown: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
+            copy: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>',
+            check: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+            pin: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>',
+            settings: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>',
+            rotateCcw: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>',
+            sun: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>',
+            moon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>',
+            wifi: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h.01"/><path d="M2 8.82a15 15 0 0 1 20 0"/><path d="M5 12.859a10 10 0 0 1 14 0"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/></svg>',
+            densityCompact: '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="1.5" rx="0.75" fill="currentColor"/><rect x="1" y="5" width="12" height="1.5" rx="0.75" fill="currentColor"/><rect x="1" y="8" width="12" height="1.5" rx="0.75" fill="currentColor"/><rect x="1" y="11" width="12" height="1.5" rx="0.75" fill="currentColor"/></svg>',
+            densityDefault: '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="1.5" rx="0.75" fill="currentColor"/><rect x="1" y="6" width="12" height="1.5" rx="0.75" fill="currentColor"/><rect x="1" y="10" width="12" height="1.5" rx="0.75" fill="currentColor"/></svg>',
+            densityComfortable: '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1.5" width="12" height="2" rx="1" fill="currentColor"/><rect x="1" y="6" width="12" height="2" rx="1" fill="currentColor"/><rect x="1" y="10.5" width="12" height="2" rx="1" fill="currentColor"/></svg>',
+        }
+
+        function icon(name, cls) {
+            const s = span({class: cls || ''})
+            s.innerHTML = ICONS[name] || ''
+            s.style.display = 'inline-flex'
+            s.style.alignItems = 'center'
+            return s
+        }
 
         // ──────────────────────────────────────────
         // State
@@ -605,6 +1148,10 @@
         const searching   = van.state(false)
         const knownFields = van.state([])     // FieldInfo[] from /fields
         const emptyMessage = van.state("")    // Empty-state headline override
+
+        // Theme & density
+        const theme   = van.state("dark")     // "dark" | "light"
+        const density = van.state("default")  // "compact" | "default" | "comfortable"
 
         // Time range filter state
         const timePreset   = van.state("all")  // preset key
@@ -669,6 +1216,8 @@
                             customStart: timeStartStr.val || null,
                             customEnd: timeEndStr.val || null,
                         },
+                        theme: theme.val,
+                        density: density.val,
                     }
                     saveStorage(UI_PREFS_KEY, prefs)
                 } catch {}
@@ -1009,7 +1558,11 @@
             if (toastTimer) { clearTimeout(toastTimer); toastTimer = null }
             const el = document.createElement('div')
             el.className = 'toast'
-            el.textContent = msg
+            const iconSpan = document.createElement('span')
+            iconSpan.className = 'toast-icon'
+            iconSpan.innerHTML = ICONS.check
+            el.appendChild(iconSpan)
+            el.appendChild(document.createTextNode(msg))
             document.body.appendChild(el)
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => { el.classList.add('visible') })
@@ -1043,6 +1596,84 @@
                     showToast('Copy failed')
                 }
             }
+        }
+
+        // ──────────────────────────────────────────
+        // Theme & density
+        // ──────────────────────────────────────────
+        function applyTheme(t) {
+            document.documentElement.classList.remove('dark', 'light')
+            document.documentElement.classList.add(t)
+            document.documentElement.style.colorScheme = t
+        }
+
+        function toggleTheme() {
+            const next = theme.val === 'dark' ? 'light' : 'dark'
+            theme.val = next
+            applyTheme(next)
+            saveUiPrefs()
+        }
+
+        function setDensity(d) {
+            document.documentElement.classList.remove('density-compact', 'density-comfortable')
+            if (d !== 'default') document.documentElement.classList.add(`density-${d}`)
+            density.val = d
+            saveUiPrefs()
+        }
+
+        // ──────────────────────────────────────────
+        // Dropdown portal helper
+        // ──────────────────────────────────────────
+        let activeDropdown = null
+
+        function openDropdown(triggerEl, buildContentFn, opts = {}) {
+            closeDropdown()
+            const portal = document.createElement('div')
+            portal.className = 'dropdown-portal'
+            if (opts.width) portal.style.width = opts.width
+            if (opts.minWidth) portal.style.minWidth = opts.minWidth
+            buildContentFn(portal)
+            document.body.appendChild(portal)
+
+            // Position relative to trigger
+            const rect = triggerEl.getBoundingClientRect()
+            const pw = portal.offsetWidth
+            const ph = portal.offsetHeight
+            let top = rect.bottom + 4
+            let left = opts.align === 'start' ? rect.left : rect.right - pw
+
+            // Flip up if near bottom
+            if (top + ph > window.innerHeight - 8) top = rect.top - ph - 4
+            // Keep in viewport horizontally
+            if (left < 8) left = 8
+            if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8
+
+            portal.style.top = top + 'px'
+            portal.style.left = left + 'px'
+
+            activeDropdown = { portal, trigger: triggerEl }
+
+            // Close on outside click or Escape
+            const dismiss = e => {
+                if (e.type === 'keydown' && e.key !== 'Escape') return
+                if (e.type === 'mousedown' && (portal.contains(e.target) || triggerEl.contains(e.target))) return
+                closeDropdown()
+            }
+            document.addEventListener('mousedown', dismiss, { capture: true })
+            document.addEventListener('keydown', dismiss, { capture: true })
+            portal._dismiss = dismiss
+            return portal
+        }
+
+        function closeDropdown() {
+            if (!activeDropdown) return
+            const { portal } = activeDropdown
+            if (portal._dismiss) {
+                document.removeEventListener('mousedown', portal._dismiss, { capture: true })
+                document.removeEventListener('keydown', portal._dismiss, { capture: true })
+            }
+            portal.remove()
+            activeDropdown = null
         }
 
         // ──────────────────────────────────────────
@@ -1305,13 +1936,91 @@
             return [...fieldSugs, ...opSugs]
         }
 
-        // Search bar
+        // ──────────────────────────────────────────
+        // Header bar — logo, connection, density, theme, settings
+        // ──────────────────────────────────────────
+        function Header() {
+            const densities = ['compact', 'default', 'comfortable']
+            const densityIcons = { compact: 'densityCompact', default: 'densityDefault', comfortable: 'densityComfortable' }
+
+            // Connection dot
+            const dot = span({class: () => 'peek-conn-dot' + (wsStatus.val === 'connected' ? ' connected' : '')})
+            const connLabel = span({class: 'peek-conn-label'}, () => wsStatus.val === 'connected' ? 'Connected' : 'Disconnected')
+
+            // Record count
+            const countEl = span({class: 'peek-records'}, () => logs.val.length.toLocaleString() + ' records')
+
+            // Density pill
+            const densityPill = div({class: 'density-pill', role: 'group', 'aria-label': 'UI density'})
+            for (const d of densities) {
+                const btn = button({
+                    class: () => 'density-btn' + (density.val === d ? ' active' : ''),
+                    title: d.charAt(0).toUpperCase() + d.slice(1) + ' density',
+                    'aria-label': d + ' density',
+                    'aria-pressed': () => String(density.val === d),
+                    onclick: () => setDensity(d),
+                }, icon(densityIcons[d]))
+                van.add(densityPill, btn)
+            }
+
+            // Theme toggle
+            const themeBtn = button({
+                class: 'icon-btn',
+                'aria-label': () => 'Switch to ' + (theme.val === 'dark' ? 'light' : 'dark') + ' mode',
+                onclick: toggleTheme,
+            }, () => theme.val === 'dark' ? icon('sun') : icon('moon'))
+
+            // Settings dropdown
+            const settingsBtn = button({
+                class: 'icon-btn',
+                'aria-label': 'Settings',
+                'data-testid': 'settings-btn',
+                onclick: e => {
+                    openDropdown(e.currentTarget, portal => {
+                        const item = document.createElement('button')
+                        item.className = 'dp-item'
+                        item.innerHTML = ICONS.rotateCcw + ' Reset preferences'
+                        item.dataset.testid = 'reset-ui-prefs-btn'
+                        item.addEventListener('click', () => {
+                            closeDropdown()
+                            try { localStorage.removeItem(UI_PREFS_KEY) } catch {}
+                            columnWidths.clear()
+                            pinned.val = []
+                            timePreset.val = 'all'
+                            timeStartStr.val = ''
+                            timeEndStr.val = ''
+                            theme.val = 'dark'
+                            applyTheme('dark')
+                            density.val = 'default'
+                            document.documentElement.classList.remove('density-compact', 'density-comfortable')
+                            executeQuery()
+                        })
+                        portal.appendChild(item)
+                    }, {minWidth: '180px'})
+                },
+            }, icon('settings'))
+
+            return hdr({class: 'peek-header'},
+                div({class: 'peek-header-left'},
+                    div({class: 'peek-logo'}, icon('eye', 'logo-icon'), span({class: 'peek-logo-title'}, 'Peek')),
+                    div({class: 'peek-conn'}, dot, connLabel),
+                ),
+                div({class: 'peek-header-right'},
+                    countEl,
+                    densityPill,
+                    themeBtn,
+                    settingsBtn,
+                ),
+            )
+        }
+
+        // ──────────────────────────────────────────
+        // Search bar — query input, star, history+starred, time range
+        // ──────────────────────────────────────────
         function SearchBar() {
             const completions  = van.state([])
             const selectedIdx  = van.state(-1)
             const showDropdown = van.state(false)
-            const showHistory  = van.state(false)
-            const showStarred  = van.state(false)
 
             let savedInput = ''  // saved input value for Alt+↑/↓ navigation
 
@@ -1348,16 +2057,16 @@
                 inp.value = q
                 liveQuery.val = q
                 updateHighlightGlobal()
-                showHistory.val = false
-                showStarred.val = false
+                closeDropdown()
                 executeQuery()
             }
 
             const inp = input({
                 type: "text",
                 class: "search-editor-input",
-                placeholder: "Enter query (e.g., level:ERROR, service:api, message:*timeout*)",
+                placeholder: "level:ERROR AND service:api AND message:*timeout*",
                 autocomplete: "off",
+                spellcheck: "false",
                 oninput: () => { updateHighlight(); updateCompletions(); liveQuery.val = inp.value },
                 onscroll: () => { if (queryHighlightEl) queryHighlightEl.scrollLeft = inp.scrollLeft },
                 onkeydown: e => {
@@ -1452,267 +2161,260 @@
                 })
             })
 
-            // History panel
-            const histPanelEl = document.createElement('div')
-            histPanelEl.className = 'query-panel'
-            van.derive(() => {
-                const show  = showHistory.val
-                const items = queryHistory.val
-                histPanelEl.style.display = show ? 'block' : 'none'
-                histPanelEl.innerHTML = ''
-                if (!show) return
-                if (items.length === 0) {
-                    const empty = document.createElement('div')
-                    empty.className = 'query-panel-empty'
-                    empty.textContent = 'No history yet'
-                    histPanelEl.appendChild(empty)
-                    return
-                }
-                for (const item of items) {
-                    const row = document.createElement('div')
-                    row.className = 'query-panel-item'
-                    const text = document.createElement('span')
-                    text.className = 'qp-text'
-                    text.textContent = item.query
-                    text.title = item.query
-                    const copyBtn = document.createElement('button')
-                    copyBtn.className = 'qp-copy'
-                    copyBtn.textContent = '\u29c9'
-                    copyBtn.title = 'Copy query'
-                    copyBtn.addEventListener('mousedown', e => {
-                        e.stopPropagation()
-                        navigator.clipboard?.writeText(item.query).catch(() => {})
-                    })
-                    row.appendChild(text)
-                    row.appendChild(copyBtn)
-                    row.addEventListener('mousedown', e => {
-                        e.preventDefault()
-                        loadQuery(item.query)
-                    })
-                    histPanelEl.appendChild(row)
-                }
-            })
+            // Clear button (X icon)
+            const clearBtn = button({
+                class: 'search-clear-btn',
+                style: () => liveQuery.val ? '' : 'display:none',
+                title: 'Clear search',
+                onclick: () => { inp.value = ''; liveQuery.val = ''; updateHighlight(); showDropdown.val = false; executeQuery() },
+            }, icon('x'))
 
-            // Starred panel
-            const starredPanelEl = document.createElement('div')
-            starredPanelEl.className = 'query-panel'
-            van.derive(() => {
-                const show  = showStarred.val
-                const items = starredQueries.val
-                starredPanelEl.style.display = show ? 'block' : 'none'
-                starredPanelEl.innerHTML = ''
-                if (!show) return
-                if (items.length === 0) {
-                    const empty = document.createElement('div')
-                    empty.className = 'query-panel-empty'
-                    empty.textContent = 'No starred queries yet'
-                    starredPanelEl.appendChild(empty)
-                    return
-                }
-                for (const q of items) {
-                    const row = document.createElement('div')
-                    row.className = 'query-panel-item'
-                    const text = document.createElement('span')
-                    text.className = 'qp-text'
-                    text.textContent = q
-                    text.title = q
-                    const copyBtn = document.createElement('button')
-                    copyBtn.className = 'qp-copy'
-                    copyBtn.textContent = '\u29c9'
-                    copyBtn.title = 'Copy query'
-                    copyBtn.addEventListener('mousedown', e => {
-                        e.stopPropagation()
-                        navigator.clipboard?.writeText(q).catch(() => {})
-                    })
-                    row.appendChild(text)
-                    row.appendChild(copyBtn)
-                    row.addEventListener('mousedown', e => {
-                        e.preventDefault()
-                        loadQuery(q)
-                    })
-                    starredPanelEl.appendChild(row)
-                }
-            })
-
-            const histBtn = button({
-                class: 'query-panel-btn',
-                'data-testid': 'history-btn',
-                title: 'Query history (Alt+\u2191/\u2193)',
-                onclick: e => {
-                    e.stopPropagation()
-                    showHistory.val = !showHistory.val
-                    if (showHistory.val) showStarred.val = false
-                },
-            }, '\ud83d\udd50 History')
-
-            const starredBtn = button({
-                class: 'query-panel-btn',
-                'data-testid': 'starred-btn',
-                title: 'Starred queries',
-                onclick: e => {
-                    e.stopPropagation()
-                    showStarred.val = !showStarred.val
-                    if (showStarred.val) showHistory.val = false
-                },
-            }, '\u2605 Starred')
-
+            // Star button
             const starBtn = button({
-                class: () => 'star-btn' + (currentIsStarred.val ? ' starred' : ''),
+                class: () => 'icon-btn star-btn' + (currentIsStarred.val ? ' starred' : ''),
                 'data-testid': 'star-btn',
                 title: 'Star/unstar current query (Alt+S)',
                 onclick: () => toggleStarred(inp.value),
-            }, () => currentIsStarred.val ? '\u2605' : '\u2606')
+            }, () => currentIsStarred.val ? icon('starFilled', 'star-icon filled') : icon('star', 'star-icon'))
 
-            const histBtnWrapper   = div({class: 'query-panel-wrapper'}, histBtn, histPanelEl)
-            const starredBtnWrapper = div({class: 'query-panel-wrapper'}, starredBtn, starredPanelEl)
+            // Combined history + starred dropdown trigger
+            const historyBtn = button({
+                class: 'icon-btn',
+                'data-testid': 'history-btn',
+                title: 'Query history (Alt+\u2191/\u2193)',
+                onclick: e => {
+                    openDropdown(e.currentTarget, portal => {
+                        // Build combined panel — Recent section + Starred section
+                        function buildPanel() {
+                            portal.innerHTML = ''
+                            const hist = queryHistory.val
+                            const starred = starredQueries.val
 
-            // Close panels when clicking outside their wrappers
-            document.addEventListener('mousedown', e => {
-                if (!histBtnWrapper.contains(e.target))   showHistory.val = false
-                if (!starredBtnWrapper.contains(e.target)) showStarred.val = false
-            })
+                            // Recent section
+                            const recentHeader = document.createElement('div')
+                            recentHeader.className = 'dp-section-label'
+                            recentHeader.textContent = 'Recent'
+                            portal.appendChild(recentHeader)
 
-            const wrapper = div({class: "search-editor"}, hlDiv, inp, dropdownEl)
+                            if (hist.length === 0) {
+                                const empty = document.createElement('div')
+                                empty.className = 'dp-empty'
+                                empty.textContent = 'No history yet'
+                                portal.appendChild(empty)
+                            } else {
+                                for (const item of hist) {
+                                    const row = document.createElement('button')
+                                    row.className = 'dp-item'
+                                    row.textContent = item.query
+                                    row.title = item.query
+                                    row.addEventListener('click', () => loadQuery(item.query))
+                                    portal.appendChild(row)
+                                }
+                            }
 
-            return hdr(
-                h1("\u{1F50D} Peek"),
-                div({class: "search-bar"},
-                    wrapper,
-                    button({class: "clear-btn", title: "Clear search",
-                        onclick: () => { inp.value = ""; liveQuery.val = ""; updateHighlight(); showDropdown.val = false; executeQuery() }
-                    }, "\u00D7"),
-                    starBtn,
-                    histBtnWrapper,
-                    starredBtnWrapper,
-                    button({onclick: executeQuery}, "Search"),
-                ),
-                DateRangePicker(),
-            )
-        }
+                            // Divider
+                            const divider = document.createElement('div')
+                            divider.className = 'dp-divider'
+                            portal.appendChild(divider)
 
-        // Datetime range picker
-        function DateRangePicker() {
+                            // Starred section
+                            const starredHeader = document.createElement('div')
+                            starredHeader.className = 'dp-section-label'
+                            starredHeader.textContent = 'Starred'
+                            portal.appendChild(starredHeader)
+
+                            if (starred.length === 0) {
+                                const empty = document.createElement('div')
+                                empty.className = 'dp-empty'
+                                empty.textContent = 'No starred queries'
+                                portal.appendChild(empty)
+                            } else {
+                                for (const q of starred) {
+                                    const row = document.createElement('button')
+                                    row.className = 'dp-item starred-item'
+                                    const starIcon = document.createElement('span')
+                                    starIcon.innerHTML = ICONS.starFilled
+                                    starIcon.style.display = 'inline-flex'
+                                    starIcon.style.alignItems = 'center'
+                                    starIcon.style.flexShrink = '0'
+                                    starIcon.style.color = 'var(--peek-amber)'
+                                    row.appendChild(starIcon)
+                                    row.appendChild(document.createTextNode(q))
+                                    row.title = q
+                                    row.addEventListener('click', () => loadQuery(q))
+                                    portal.appendChild(row)
+                                }
+                            }
+                        }
+                        buildPanel()
+                    }, {minWidth: '320px', align: 'end'})
+                },
+            }, icon('history'))
+
+            // Time range dropdown
             const presets = [
-                { value: "all",       label: "All time" },
-                { value: "15m",       label: "Last 15 minutes" },
-                { value: "1h",        label: "Last 1 hour" },
-                { value: "6h",        label: "Last 6 hours" },
-                { value: "24h",       label: "Last 24 hours" },
-                { value: "7d",        label: "Last 7 days" },
-                { value: "today",     label: "Today" },
-                { value: "yesterday", label: "Yesterday" },
-                { value: "custom",    label: "Custom range…" },
+                { value: 'all',       label: 'All time' },
+                { value: '15m',       label: 'Last 15 minutes' },
+                { value: '1h',        label: 'Last 1 hour' },
+                { value: '6h',        label: 'Last 6 hours' },
+                { value: '24h',       label: 'Last 24 hours' },
+                { value: '7d',        label: 'Last 7 days' },
+                { value: 'today',     label: 'Today' },
+                { value: 'yesterday', label: 'Yesterday' },
+                { value: 'custom',    label: 'Custom range\u2026' },
             ]
 
-            const presetEl = sel({
-                class: "time-preset-select",
-                "data-testid": "time-preset",
-                onchange: e => {
-                    timePreset.val = e.target.value
-                    saveUiPrefs()
-                    if (e.target.value !== "custom") executeQuery()
+            const timeRangeBtn = button({
+                class: 'time-range-btn',
+                'data-testid': 'time-preset',
+                'data-value': () => timePreset.val,
+                onclick: e => {
+                    openDropdown(e.currentTarget, portal => {
+                        for (const p of presets) {
+                            const item = document.createElement('button')
+                            item.className = 'dp-item'
+                            if (timePreset.val === p.value) item.classList.add('active')
+                            item.textContent = p.label
+                            item.addEventListener('click', () => {
+                                timePreset.val = p.value
+                                saveUiPrefs()
+                                closeDropdown()
+                                if (p.value !== 'custom') executeQuery()
+                            })
+                            portal.appendChild(item)
+                        }
+                    }, {align: 'end'})
                 },
-            }, ...presets.map(p => option({value: p.value}, p.label)))
+            },
+                span(() => {
+                    const p = presets.find(x => x.value === timePreset.val)
+                    return p ? p.label : 'All time'
+                }),
+                icon('chevronDown', 'time-chevron'),
+            )
 
-            // Sync select DOM value with timePreset state (van.derive runs after options are in the DOM)
-            van.derive(() => { presetEl.value = timePreset.val })
-
+            // Custom range row
             const fromInput = input({
-                type: "datetime-local",
-                class: "time-custom-input",
-                "data-testid": "time-from",
+                type: 'datetime-local',
+                class: 'time-custom-input',
+                'data-testid': 'time-from',
                 value: () => timeStartStr.val,
                 oninput:  e => { timeStartStr.val = e.target.value; saveUiPrefs() },
                 onchange: () => executeQuery(),
             })
-
             const toInput = input({
-                type: "datetime-local",
-                class: "time-custom-input",
-                "data-testid": "time-to",
+                type: 'datetime-local',
+                class: 'time-custom-input',
+                'data-testid': 'time-to',
                 value: () => timeEndStr.val,
                 oninput:  e => { timeEndStr.val = e.target.value; saveUiPrefs() },
                 onchange: () => executeQuery(),
             })
-
+            const applyBtn = button({
+                class: 'time-apply-btn',
+                onclick: () => executeQuery(),
+            }, 'Apply')
             const customRangeEl = div({
-                class: "time-custom-range",
-                style: () => timePreset.val === "custom" ? "" : "display:none",
+                class: 'time-custom-row',
+                style: () => timePreset.val === 'custom' ? '' : 'display:none',
             },
-                span("From:"), fromInput,
-                span("To:"),   toInput,
+                label('From'), fromInput,
+                label('To'), toInput,
+                applyBtn,
             )
 
-            const resetBtn = button({
-                class: "reset-prefs-btn",
-                "data-testid": "reset-ui-prefs-btn",
-                title: "Reset UI preferences (columns, widths, time range) to defaults",
-                onclick: () => {
-                    try { localStorage.removeItem(UI_PREFS_KEY) } catch {}
-                    columnWidths.clear()
-                    pinned.val = []
-                    timePreset.val = "all"
-                    timeStartStr.val = ""
-                    timeEndStr.val = ""
-                    executeQuery()
-                },
-            }, "Reset prefs")
+            const innerWrap = div({class: 'search-input-inner'}, hlDiv, inp)
+            const inputWrapper = div({class: 'search-input-wrapper'}, icon('search', 'search-icon'), innerWrap, clearBtn)
+            const wrapper = div({class: 'search-editor'}, inputWrapper, dropdownEl)
 
-            return div({class: "time-range-picker"}, presetEl, customRangeEl, resetBtn)
+            return div({class: 'peek-search-bar'},
+                div({class: 'peek-search-row'},
+                    wrapper,
+                    starBtn,
+                    historyBtn,
+                    timeRangeBtn,
+                ),
+                customRangeEl,
+            )
         }
 
-        // Stats bar
+        // Stats bar (bottom status bar)
         function StatsBar() {
-            return div({class: "stats"},
-                span(() => `Records: ${logs.val.length}`),
-                span(() => {
-                    const s = wsStatus.val
-                    return s === "connected" ? "\u{1F7E2} Connected"
-                         : s === "error"     ? "\u{1F534} Error"
-                         :                     "\u26AB Disconnected"
-                }),
-                label({style: "margin-left:auto; display:flex; align-items:center; gap:0.3rem; cursor:pointer; user-select:none;"},
-                    input({type: "checkbox", checked: true,
-                        style: "accent-color:#4CAF50; cursor:pointer;",
-                        onchange: e => { autoScroll.val = e.target.checked }
-                    }),
-                    " Auto-scroll"
+            return div({class: 'stats-bar'},
+                div({class: 'stats-bar-left'},
+                    label({class: 'auto-scroll-label'},
+                        input({type: 'checkbox', class: 'auto-scroll-checkbox', checked: true,
+                            onchange: e => { autoScroll.val = e.target.checked }
+                        }),
+                        span('Auto-scroll'),
+                    ),
+                ),
+                div({class: 'stats-bar-right'},
+                    div({class: 'ws-status'},
+                        icon('wifi', () => wsStatus.val === 'connected' ? 'connected' : ''),
+                        span(() => 'WebSocket ' + (wsStatus.val === 'connected' ? 'connected' : 'disconnected')),
+                    ),
+                    span({class: 'record-count'}, () => logs.val.length.toLocaleString() + ' records'),
                 ),
             )
         }
 
-        // Fields table inside expanded detail row
+        // Fields grid inside expanded detail row
         function FieldsTable(entry) {
             const fields = entry.fields
             const hasFields = fields && Object.keys(fields).length > 0
 
             if (!hasFields) {
-                const container = document.createElement("div")
-                const lbl = document.createElement("span")
-                lbl.className = "detail-label"
-                lbl.textContent = "raw"
+                const container = document.createElement('div')
+                container.style.padding = '0.75rem 1.5rem'
+                const lbl = document.createElement('span')
+                lbl.className = 'detail-label'
+                lbl.textContent = 'raw'
                 container.appendChild(lbl)
-                container.appendChild(document.createTextNode("\n" + (entry.raw || entry.message || "")))
+                container.appendChild(document.createTextNode('\n' + (entry.raw || entry.message || '')))
                 return container
             }
 
-            return table({class: "fields-table"},
-                ...Object.entries(fields).map(([k, v]) =>
-                    tr(
-                        td({class: "field-key", title: "Click to add as column",
-                            onclick: e => { e.stopPropagation(); toggleColumn(k) }
-                        }, k),
-                        td({class: "field-val", title: `Click to filter ${k}:${v}`,
-                            onclick: e => { e.stopPropagation(); filterByField(k, String(v)) }
-                        }, String(v)),
-                        td({class: "field-copy-cell"},
-                            button({class: "copy-btn field-copy-btn", title: "Copy value",
-                                onclick: e => { e.stopPropagation(); copyToClipboard(String(v), 'Copied value') }
-                            }, "\u29c9")
-                        ),
-                    )
-                )
-            )
+            const grid = document.createElement('div')
+            grid.className = 'fields-grid'
+            for (const [k, v] of Object.entries(fields)) {
+                const isPinned = pinned.val.includes(k)
+                const isStack = k === 'stack_trace'
+
+                // Key cell
+                const keyEl = document.createElement('button')
+                keyEl.className = 'field-key' + (isPinned ? ' pinned' : '')
+                keyEl.title = isPinned ? `"${k}" is pinned as column` : `Click to pin "${k}" as column`
+                const pinIcon = document.createElement('span')
+                pinIcon.className = 'pin-icon'
+                pinIcon.innerHTML = ICONS.pin
+                pinIcon.style.display = 'inline-flex'
+                pinIcon.style.alignItems = 'center'
+                keyEl.appendChild(pinIcon)
+                keyEl.appendChild(document.createTextNode(k))
+                keyEl.addEventListener('click', e => { e.stopPropagation(); toggleColumn(k) })
+                grid.appendChild(keyEl)
+
+                // Value cell
+                const valCell = document.createElement('div')
+                valCell.className = 'field-val-cell'
+                const valEl = document.createElement('button')
+                valEl.className = 'field-val' + (isStack ? ' stack-trace' : '')
+                valEl.textContent = String(v)
+                valEl.title = `Filter by ${k}:${v}`
+                valEl.addEventListener('click', e => { e.stopPropagation(); filterByField(k, String(v)) })
+                const copyBtn = document.createElement('button')
+                copyBtn.className = 'copy-btn field-copy-btn'
+                copyBtn.title = 'Copy value'
+                copyBtn.innerHTML = ICONS.copy
+                copyBtn.style.display = 'inline-flex'
+                copyBtn.style.alignItems = 'center'
+                copyBtn.addEventListener('click', e => { e.stopPropagation(); copyToClipboard(String(v), 'Copied value') })
+                valCell.appendChild(valEl)
+                valCell.appendChild(copyBtn)
+                grid.appendChild(valCell)
+            }
+            return grid
         }
 
         // Single log row pair (main + detail)
@@ -1720,7 +2422,6 @@
             const expanded = van.state(false)
             const level = entry.level ? entry.level.toUpperCase() : ""
             const levelClass = level || "NONE"
-            const levelDisplay = level || "\u2014"
 
             // Watch for expansion changes and restore scroll
             van.derive(() => {
@@ -1738,10 +2439,10 @@
             })
 
             // Main row wrapper (display: contents, children become grid items)
-            const mainRow = div({class: `log-row${isNew ? " new" : ""}`, "data-id": entry.id})
+            const mainRow = div({class: () => `log-row${isNew ? " new" : ""}${expanded.val ? " expanded" : ""}`, "data-id": entry.id})
             
             // Chevron cell
-            const chevron = div({class: "col-chevron", onclick: (e) => {
+            const chevron = div({class: () => 'col-chevron' + (expanded.val ? ' expanded' : ''), onclick: (e) => {
                 e.preventDefault()
                 e.stopPropagation()
                 
@@ -1757,18 +2458,22 @@
                 // Toggle expansion (this will trigger the derive above)
                 expanded.val = !expanded.val
             }},
-                () => expanded.val ? "\u25BE" : "\u25B8"
+                () => expanded.val ? icon('chevronDown') : icon('chevronRight')
             )
             van.add(mainRow, chevron)
             
             // Fixed columns
             van.add(mainRow, div({class: "col-time"}, fmtTime(entry.timestamp)))
-            van.add(mainRow, div({class: `col-level level-${levelClass}`}, levelDisplay))
+
+            // Level badge
+            const levelBadge = span({class: `level-badge level-${levelClass}`}, level || '\u2014')
+            van.add(mainRow, div({class: "col-level"}, levelBadge))
+
             van.add(mainRow, div({class: "col-msg"},
                 span({class: "col-msg-text"}, entry.message),
                 button({class: "copy-btn row-copy-btn", title: "Copy log line",
                     onclick: e => { e.stopPropagation(); copyToClipboard(entry.raw || entry.message || '', 'Copied log line') }
-                }, "\u29c9")
+                }, icon('copy'))
             ))
 
             // Pinned columns
@@ -1830,7 +2535,9 @@
                     const removeBtn = document.createElement("span")
                     removeBtn.className = "col-remove-hdr"
                     removeBtn.title = "Remove column"
-                    removeBtn.textContent = "\u2715"  // ✕
+                    removeBtn.innerHTML = ICONS.x
+                    removeBtn.style.display = 'inline-flex'
+                    removeBtn.style.alignItems = 'center'
                     removeBtn.addEventListener("click", e => {
                         e.stopPropagation()
                         toggleColumn(col)
@@ -2031,7 +2738,7 @@
             return container
         }
 
-        // Status bar
+        // Status bar (error messages)
         function StatusBar() {
             return div({class: () => statusText.val.startsWith("Error") ? "status error" : "status"},
                 () => statusText.val
@@ -2043,6 +2750,7 @@
         // ──────────────────────────────────────────
         function App() {
             return [
+                Header(),
                 SearchBar(),
                 mn(
                     LogTable(),
@@ -2078,14 +2786,23 @@
                     if (typeof prefs.timeRange.customEnd === 'string') timeEndStr.val = prefs.timeRange.customEnd
                 }
             }
+            // Theme
+            const validThemes = new Set(['dark', 'light'])
+            if (typeof prefs.theme === 'string' && validThemes.has(prefs.theme)) {
+                theme.val = prefs.theme
+            }
+            applyTheme(theme.val)
+            // Density
+            const validDensities = new Set(['compact', 'default', 'comfortable'])
+            if (typeof prefs.density === 'string' && validDensities.has(prefs.density)) {
+                density.val = prefs.density
+            }
+            if (density.val !== 'default') {
+                document.documentElement.classList.add(`density-${density.val}`)
+            }
         })()
 
         van.add(document.body, App())
-        // Post-mount: sync time preset select to persisted state (ensures value is set after options are in DOM)
-        {
-            const _presetSel = document.querySelector('[data-testid="time-preset"]')
-            if (_presetSel && timePreset.val !== 'all') _presetSel.value = timePreset.val
-        }
         connectWebSocket()
         loadStats()
         fetchFields()

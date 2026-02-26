@@ -58,6 +58,6 @@ test.describe('search-caret', () => {
     const displayMode = await page.evaluate(() =>
       getComputedStyle(document.querySelector('.search-highlight')).display
     );
-    expect(displayMode).toBe('block');
+    expect(displayMode).toBe('flex');
   });
 });
