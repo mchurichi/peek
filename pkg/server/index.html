@@ -1544,7 +1544,12 @@
                 }
                 liveQuery.val = queryInputEl.value
                 updateHighlightGlobal()
-                queryInputEl.focus()
+                // Do NOT focus the input — avoids triggering autocomplete and browser scroll-to-focus
+            }
+            // Preserve scroll across the query rebuild
+            if (logContainerEl) {
+                window.scrollPreserveValue = logContainerEl.scrollTop
+                globalScrollPreserve = logContainerEl.scrollTop
             }
             executeQuery()
         }
@@ -2666,12 +2671,13 @@
                 }
                 
                 // Always save current scroll position BEFORE any changes
-                // Prefer window.scrollPreserveValue if set (e.g., from column drag)
+                // Prefer window.scrollPreserveValue if set (e.g., from column drag or field filter click)
                 if (logContainerEl && pinnedChanged && !newLogsAdded) {
                     preserveScroll = window.scrollPreserveValue > 0 ? window.scrollPreserveValue : logContainerEl.scrollTop
                     window.scrollPreserveValue = 0  // Reset after use
                 } else if (logContainerEl && logsChanged && !pinnedChanged && !autoScroll.val) {
-                    preserveScroll = logContainerEl.scrollTop
+                    preserveScroll = window.scrollPreserveValue > 0 ? window.scrollPreserveValue : logContainerEl.scrollTop
+                    window.scrollPreserveValue = 0  // Reset after use
                 }
                 
                 lastPinnedRef = cols
