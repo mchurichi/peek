@@ -142,19 +142,22 @@ test.describe('table', () => {
     expect(serviceBox).not.toBeNull();
     expect(userIdBox).not.toBeNull();
 
-    // Perform a slow drag from service column to user_id column
-    // Drag ABOVE the column headers to trigger browser auto-scroll behavior
-    const startX = serviceBox.x + serviceBox.width / 2;
-    const startY = serviceBox.y + serviceBox.height / 2;
-    const endX = userIdBox.x + userIdBox.width / 2;
-    const endY = userIdBox.y - 10; // ABOVE the header to trigger auto-scroll toward top
+    // Perform a slow drag from user_id column to service column.
+    // Drop inserts source before target, so this should swap their order.
+    // Hover ABOVE headers briefly to trigger attempted auto-scroll, then drop on target.
+    const startX = userIdBox.x + userIdBox.width / 2;
+    const startY = userIdBox.y + userIdBox.height / 2;
+    const endX = serviceBox.x + serviceBox.width / 2;
+    const hoverY = serviceBox.y - 10;
+    const dropY = serviceBox.y + serviceBox.height / 2;
 
     await page.mouse.move(startX, startY);
     await page.mouse.down();
     // Drag slowly with many steps, moving upward to trigger auto-scroll
-    await page.mouse.move(endX, endY, { steps: 30 });
+    await page.mouse.move(endX, hoverY, { steps: 30 });
     // Hold above the column for 500ms to trigger auto-scroll
     await delay(500);
+    await page.mouse.move(endX, dropY, { steps: 6 });
     await page.mouse.up();
     await delay(500);
 
@@ -162,5 +165,14 @@ test.describe('table', () => {
     const scrollAfter = await getScroll(page);
     const scrollDrift = Math.abs(scrollAfter - scrollBefore);
     expect(scrollDrift).toBeLessThanOrEqual(5);
+
+    // Verify pinned order changed.
+    const pinnedAfter = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('.log-table-header .col-pinned'))
+        .map((el) => el.getAttribute('data-col'))
+        .filter(Boolean)
+    );
+    expect(pinnedAfter).toEqual(expect.arrayContaining(['service', 'user_id']));
+    expect(pinnedAfter.indexOf('user_id')).toBeLessThan(pinnedAfter.indexOf('service'));
   });
 });

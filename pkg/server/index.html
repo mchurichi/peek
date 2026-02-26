@@ -995,9 +995,9 @@
             gap: 0.25rem;
         }
 
-        .stats-bar-right .ws-status svg.connected { color: var(--peek-green); }
-        .stats-bar-right .ws-status svg.disconnected { color: var(--peek-red); }
-        .stats-bar-right .ws-status svg.error { color: var(--peek-red); }
+        .stats-bar-right .ws-status .connected { color: var(--peek-green); }
+        .stats-bar-right .ws-status .disconnected { color: var(--peek-red); }
+        .stats-bar-right .ws-status .error { color: var(--peek-amber); }
 
         .stats-bar-right .record-count {
             font-family: var(--font-mono);
@@ -1660,8 +1660,8 @@
             // Flip up if near bottom
             if (top + ph > window.innerHeight - 8) top = rect.top - ph - 4
             // Keep in viewport horizontally
-            if (left < 8) left = 8
             if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8
+            if (left < 8) left = 8
 
             portal.style.top = top + 'px'
             portal.style.left = left + 'px'
@@ -2181,6 +2181,7 @@
                 class: 'search-clear-btn',
                 style: () => liveQuery.val ? '' : 'display:none',
                 title: 'Clear search',
+                'aria-label': 'Clear search',
                 onclick: () => { inp.value = ''; liveQuery.val = ''; updateHighlight(); showDropdown.val = false; executeQuery() },
             }, icon('x'))
 
@@ -2189,6 +2190,8 @@
                 class: () => 'icon-btn star-btn' + (currentIsStarred.val ? ' starred' : ''),
                 'data-testid': 'star-btn',
                 title: 'Star/unstar current query (Alt+S)',
+                'aria-label': () => currentIsStarred.val ? 'Unstar current query' : 'Star current query',
+                'aria-pressed': () => String(currentIsStarred.val),
                 onclick: () => toggleStarred(inp.value),
             }, () => currentIsStarred.val ? icon('starFilled', 'star-icon filled') : icon('star', 'star-icon'))
 
@@ -2197,6 +2200,7 @@
                 class: 'icon-btn',
                 'data-testid': 'history-btn',
                 title: 'Query history (Alt+\u2191/\u2193)',
+                'aria-label': 'Open query history',
                 onclick: e => {
                     openDropdown(e.currentTarget, portal => {
                         portal.classList.add('dp-tabbed')
@@ -2389,8 +2393,18 @@
                 ),
                 div({class: 'stats-bar-right'},
                     div({class: 'ws-status'},
-                        icon('wifi', () => wsStatus.val === 'connected' ? 'connected' : ''),
-                        span(() => wsStatus.val === 'connected' ? 'Connected' : 'Disconnected'),
+                        icon('wifi', () => wsStatus.val === 'connected'
+                            ? 'connected'
+                            : wsStatus.val === 'error'
+                                ? 'error'
+                                : 'disconnected'
+                        ),
+                        span(() => wsStatus.val === 'connected'
+                            ? 'Connected'
+                            : wsStatus.val === 'error'
+                                ? 'Error'
+                                : 'Disconnected'
+                        ),
                     ),
                     span({class: 'record-count'}, () => logs.val.length.toLocaleString() + ' records'),
                 ),
