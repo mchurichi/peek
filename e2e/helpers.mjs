@@ -64,7 +64,7 @@ export async function startServer(port, { rows = 40, lines = null } = {}) {
     ${inputCmd} | ${testBinPath} --port ${port} --no-browser --db-path ${testDbPath} --all --retention-days 0 --retention-size 10GB > ${testLogPath} 2>&1
   `;
 
-  const proc = spawn('sh', ['-c', cmd], { cwd: PROJECT_ROOT });
+  const proc = spawn('sh', ['-c', cmd], { cwd: PROJECT_ROOT, detached: true });
 
   const deadline = Date.now() + STARTUP_TIMEOUT_MS;
   while (Date.now() < deadline) {
@@ -88,14 +88,15 @@ export async function stopServer(proc) {
     return;
   }
 
-  proc.kill('SIGTERM');
+  // Kill the entire process group (the sh wrapper + the peek child binary)
+  try { process.kill(-proc.pid, 'SIGTERM'); } catch { proc.kill('SIGTERM'); }
   await Promise.race([
     once(proc, 'exit').catch(() => {}),
     delay(1_000),
   ]);
 
   if (proc.exitCode === null) {
-    proc.kill('SIGKILL');
+    try { process.kill(-proc.pid, 'SIGKILL'); } catch { proc.kill('SIGKILL'); }
     await Promise.race([
       once(proc, 'exit').catch(() => {}),
       delay(1_000),

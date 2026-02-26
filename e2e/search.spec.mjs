@@ -93,11 +93,20 @@ test.describe('search', () => {
     const inputAfterEnter = await searchInput.inputValue();
     expect(inputAfterEnter).toContain('service:');
 
+    // Dropdown should show value suggestions after completing a field name
     const dropdownAfterEnter = await page.evaluate(() => {
       const d = document.querySelector('.search-autocomplete');
       return !!(d && d.style.display !== 'none');
     });
-    expect(dropdownAfterEnter).toBeFalsy();
+    expect(dropdownAfterEnter).toBeTruthy();
+    // Verify it's showing value suggestions, not field names
+    const hasValueSuggestions = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('.search-autocomplete-item'))
+        .some((el) => !el.textContent.includes(':'))
+    );
+    expect(hasValueSuggestions).toBeTruthy();
+    // Close dropdown for next test step
+    await searchInput.press('Escape');
 
     await searchInput.fill('');
     await searchInput.type('lev');

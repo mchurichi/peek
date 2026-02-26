@@ -385,8 +385,6 @@
             flex: 1;
             min-width: 0;
             height: 100%;
-            display: flex;
-            align-items: center;
         }
 
         .search-editor-input {
@@ -401,7 +399,7 @@
             caret-color: var(--peek-green);
             font-family: var(--font-mono);
             font-size: var(--search-font-size);
-            line-height: 1.4;
+            line-height: var(--search-height);
             box-sizing: border-box;
         }
 
@@ -417,12 +415,11 @@
             border: none;
             font-family: var(--font-mono);
             font-size: var(--search-font-size);
-            line-height: 1.4;
+            line-height: var(--search-height);
             white-space: pre;
             overflow: hidden;
             pointer-events: none;
-            display: flex;
-            align-items: center;
+            display: block;
             color: var(--foreground);
             box-sizing: border-box;
         }
@@ -813,7 +810,6 @@
 
         .detail-row.visible {
             display: block;
-            animation: expandDetail 0.25s ease-out forwards;
         }
 
         .pinned-val { color: var(--muted-foreground); }
@@ -900,7 +896,9 @@
             display: flex;
             align-items: center;
             gap: 0.375rem;
+            border: none;
             border-bottom: 1px dotted rgba(75,80,96,0.3);
+            background: transparent;
             transition: color 0.15s;
         }
 
@@ -932,6 +930,10 @@
             cursor: pointer;
             font-family: var(--font-mono);
             font-size: var(--detail-font-size);
+            background: transparent;
+            border: none;
+            padding: 0;
+            text-align: left;
         }
 
         .fields-grid .field-val:hover { text-decoration: underline; }
@@ -1921,7 +1923,7 @@
         function getCompletions(ctx, fields) {
             const partial = ctx.partial.toLowerCase()
             if (ctx.type === 'value') {
-                const fi = fields.find(f => f.name === ctx.field)
+                const fi = fields.find(f => f.name.toLowerCase() === ctx.field.toLowerCase())
                 if (!fi || !fi.top_values.length) return []
                 return fi.top_values
                     .filter(v => String(v).toLowerCase().startsWith(partial))
@@ -2048,9 +2050,14 @@
                 inp.value = before + item.insert + after
                 const newPos = before.length + item.insert.length
                 inp.setSelectionRange(newPos, newPos)
-                showDropdown.val = false
                 selectedIdx.val = -1
                 updateHighlight()
+                // Trigger value suggestions if field name was completed (ends with colon)
+                if (item.insert.endsWith(':')) {
+                    updateCompletions()
+                } else {
+                    showDropdown.val = false
+                }
             }
 
             function loadQuery(q) {
@@ -2439,37 +2446,39 @@
             })
 
             // Main row wrapper (display: contents, children become grid items)
-            const mainRow = div({class: () => `log-row${isNew ? " new" : ""}${expanded.val ? " expanded" : ""}`, "data-id": entry.id})
+            const mainRow = div({
+                class: () => `log-row${isNew ? " new" : ""}${expanded.val ? " expanded" : ""}`,
+                "data-id": entry.id,
+            })
             
-            // Chevron cell
-            const chevron = div({class: () => 'col-chevron' + (expanded.val ? ' expanded' : ''), onclick: (e) => {
+            // Shared toggle function for row expansion
+            function toggleExpand(e) {
+                // Ignore clicks on buttons and other actionable elements
+                if (e.target.closest('button, .copy-btn, a')) return
                 e.preventDefault()
-                e.stopPropagation()
-                
                 const container = logContainerEl
                 const currentScroll = container?.scrollTop || 0
                 const savedScroll = globalScrollPreserve || currentScroll
-                
-                // Update scroll preserve value before toggle
                 if (savedScroll > 0) {
                     window.scrollPreserveValue = savedScroll
                 }
-                
-                // Toggle expansion (this will trigger the derive above)
                 expanded.val = !expanded.val
-            }},
+            }
+            
+            // Chevron cell
+            const chevron = div({class: () => 'col-chevron' + (expanded.val ? ' expanded' : ''), onclick: toggleExpand},
                 () => expanded.val ? icon('chevronDown') : icon('chevronRight')
             )
             van.add(mainRow, chevron)
             
             // Fixed columns
-            van.add(mainRow, div({class: "col-time"}, fmtTime(entry.timestamp)))
+            van.add(mainRow, div({class: "col-time", onclick: toggleExpand}, fmtTime(entry.timestamp)))
 
             // Level badge
             const levelBadge = span({class: `level-badge level-${levelClass}`}, level || '\u2014')
-            van.add(mainRow, div({class: "col-level"}, levelBadge))
+            van.add(mainRow, div({class: "col-level", onclick: toggleExpand}, levelBadge))
 
-            van.add(mainRow, div({class: "col-msg"},
+            van.add(mainRow, div({class: "col-msg", onclick: toggleExpand},
                 span({class: "col-msg-text"}, entry.message),
                 button({class: "copy-btn row-copy-btn", title: "Copy log line",
                     onclick: e => { e.stopPropagation(); copyToClipboard(entry.raw || entry.message || '', 'Copied log line') }
@@ -2479,7 +2488,7 @@
             // Pinned columns
             for (const col of pinned.val) {
                 const val = entry.fields?.[col] != null ? String(entry.fields[col]) : ""
-                van.add(mainRow, div({class: "pinned-val", title: col}, val))
+                van.add(mainRow, div({class: "pinned-val", title: col, onclick: toggleExpand}, val))
             }
 
             // Detail row (spans all columns)
@@ -2520,6 +2529,7 @@
 
                 // Pinned columns (draggable + remove on X only)
                 let dragSrcCol = null
+                let dragScrollPos = 0
                 for (const col of pinned.val) {
                     const width = columnWidths.get(`pinned-${col}`) || "200px"
                     gridCols.push(width)
@@ -2551,10 +2561,24 @@
                         dragSrcCol = col
                         el.classList.add("dragging")
                         e.dataTransfer.effectAllowed = "move"
+                        // Save scroll position and lock it for the entire drag
+                        if (logContainerEl) {
+                            dragScrollPos = logContainerEl.scrollTop
+                            // Add scroll lock listener — fires immediately when browser auto-scroll kicks in
+                            logContainerEl._dragScrollLock = () => {
+                                logContainerEl.scrollTop = dragScrollPos
+                            }
+                            logContainerEl.addEventListener("scroll", logContainerEl._dragScrollLock, { passive: true })
+                        }
                     })
                     el.addEventListener("dragend", () => {
                         el.classList.remove("dragging")
                         headerEl.querySelectorAll(".col-pinned").forEach(th => th.classList.remove("drag-over"))
+                        // Remove scroll lock
+                        if (logContainerEl?._dragScrollLock) {
+                            logContainerEl.removeEventListener("scroll", logContainerEl._dragScrollLock)
+                            logContainerEl._dragScrollLock = null
+                        }
                     })
                     el.addEventListener("dragover", e => {
                         e.preventDefault()
@@ -2567,7 +2591,17 @@
                     el.addEventListener("drop", e => {
                         e.preventDefault()
                         el.classList.remove("drag-over")
+                        // Remove scroll lock before changing columns
+                        if (logContainerEl?._dragScrollLock) {
+                            logContainerEl.removeEventListener("scroll", logContainerEl._dragScrollLock)
+                            logContainerEl._dragScrollLock = null
+                        }
                         if (dragSrcCol && dragSrcCol !== col) {
+                            // Use scroll position saved at dragstart
+                            if (logContainerEl && dragScrollPos > 0) {
+                                window.scrollPreserveValue = dragScrollPos
+                                globalScrollPreserve = dragScrollPos
+                            }
                             const cols = [...pinned.val]
                             const fromIdx = cols.indexOf(dragSrcCol)
                             const toIdx = cols.indexOf(col)
@@ -2632,8 +2666,10 @@
                 }
                 
                 // Always save current scroll position BEFORE any changes
+                // Prefer window.scrollPreserveValue if set (e.g., from column drag)
                 if (logContainerEl && pinnedChanged && !newLogsAdded) {
-                    preserveScroll = logContainerEl.scrollTop
+                    preserveScroll = window.scrollPreserveValue > 0 ? window.scrollPreserveValue : logContainerEl.scrollTop
+                    window.scrollPreserveValue = 0  // Reset after use
                 } else if (logContainerEl && logsChanged && !pinnedChanged && !autoScroll.val) {
                     preserveScroll = logContainerEl.scrollTop
                 }
