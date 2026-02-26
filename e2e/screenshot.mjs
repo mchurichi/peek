@@ -169,7 +169,7 @@ try {
 
   browser = await chromium.launch({ headless: true });
   const ctx = await browser.newContext({
-    viewport: { width: 1400, height: 800 },
+    viewport: { width: 1120, height: 640 },
     deviceScaleFactor: 2, // retina-quality screenshot
     colorScheme: 'dark',
   });
@@ -178,21 +178,15 @@ try {
   await page.waitForSelector('.log-table-body .col-chevron');
 
   // Type a Lucene query and execute
-  await page.fill('input[type="text"]', 'level:ERROR OR level:WARN');
-  await page.click('button:has-text("Search")');
+  await page.fill('.search-editor-input', 'level:ERROR OR level:WARN');
+  await page.press('.search-editor-input', 'Enter');
   await page.waitForTimeout(500);
   await page.waitForSelector('.log-table-body .col-chevron');
 
-  // Expand the first error row to show fields
+  // Expand the 5th row to show fields
   await page.evaluate(() => {
     const chevrons = document.querySelectorAll('.log-table-body .col-chevron');
-    for (const c of chevrons) {
-      const r = c.getBoundingClientRect();
-      if (r.top > 50 && r.bottom < window.innerHeight) {
-        c.click();
-        return;
-      }
-    }
+    if (chevrons[4]) chevrons[4].click();
   });
   await page.waitForTimeout(300);
 

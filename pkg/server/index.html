@@ -243,36 +243,6 @@
             color: var(--foreground);
         }
 
-        .peek-conn {
-            display: flex;
-            align-items: center;
-            gap: 0.375rem;
-        }
-
-        .peek-conn-dot {
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            flex-shrink: 0;
-        }
-
-        .peek-conn-dot.connected {
-            background: var(--peek-green);
-            box-shadow: 0 0 6px var(--peek-green);
-        }
-
-        .peek-conn-dot.disconnected {
-            background: var(--peek-red);
-            box-shadow: 0 0 6px var(--peek-red);
-        }
-
-        .peek-conn-label {
-            font-size: 0.75rem;
-            color: var(--muted-foreground);
-            white-space: nowrap;
-        }
-
         .peek-records {
             font-size: 0.75rem;
             color: var(--muted-foreground);
@@ -1950,10 +1920,6 @@
             const densities = ['compact', 'default', 'comfortable']
             const densityIcons = { compact: 'densityCompact', default: 'densityDefault', comfortable: 'densityComfortable' }
 
-            // Connection dot
-            const dot = span({class: () => 'peek-conn-dot' + (wsStatus.val === 'connected' ? ' connected' : '')})
-            const connLabel = span({class: 'peek-conn-label'}, () => wsStatus.val === 'connected' ? 'Connected' : 'Disconnected')
-
             // Record count
             const countEl = span({class: 'peek-records'}, () => logs.val.length.toLocaleString() + ' records')
 
@@ -2010,7 +1976,6 @@
             return hdr({class: 'peek-header'},
                 div({class: 'peek-header-left'},
                     div({class: 'peek-logo'}, icon('eye', 'logo-icon'), span({class: 'peek-logo-title'}, 'Peek')),
-                    div({class: 'peek-conn'}, dot, connLabel),
                 ),
                 div({class: 'peek-header-right'},
                     countEl,
@@ -2364,7 +2329,7 @@
                 div({class: 'stats-bar-right'},
                     div({class: 'ws-status'},
                         icon('wifi', () => wsStatus.val === 'connected' ? 'connected' : ''),
-                        span(() => 'WebSocket ' + (wsStatus.val === 'connected' ? 'connected' : 'disconnected')),
+                        span(() => wsStatus.val === 'connected' ? 'Connected' : 'Disconnected'),
                     ),
                     span({class: 'record-count'}, () => logs.val.length.toLocaleString() + ' records'),
                 ),
