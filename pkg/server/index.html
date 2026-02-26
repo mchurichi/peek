@@ -627,6 +627,44 @@
             font-size: 0.8rem;
         }
 
+        /* Tab styles for dropdown */
+        .dropdown-portal.dp-tabbed {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            height: 340px;
+            width: 400px;
+        }
+        .dropdown-portal .dp-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .dropdown-portal .dp-tab {
+            flex: 1;
+            padding: 0.5rem 0.75rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--muted-foreground);
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            transition: color 0.15s, background 0.15s;
+            font-family: inherit;
+        }
+        .dropdown-portal .dp-tab:hover {
+            background: var(--peek-surface-3);
+        }
+        .dropdown-portal .dp-tab.active {
+            color: var(--foreground);
+            box-shadow: inset 0 -2px 0 var(--peek-green);
+        }
+        .dropdown-portal .dp-tab-panel {
+            flex: 1;
+            overflow-y: auto;
+            min-height: 0;
+        }
+
         /* ─── Main ──────────────────────────────────────────── */
         main {
             flex: 1;
@@ -2161,23 +2199,40 @@
                 title: 'Query history (Alt+\u2191/\u2193)',
                 onclick: e => {
                     openDropdown(e.currentTarget, portal => {
-                        // Build combined panel — Recent section + Starred section
-                        function buildPanel() {
-                            portal.innerHTML = ''
+                        portal.classList.add('dp-tabbed')
+                        let activeTab = 'history'
+
+                        // Tab bar
+                        const tabs = document.createElement('div')
+                        tabs.className = 'dp-tabs'
+
+                        const historyTab = document.createElement('button')
+                        historyTab.className = 'dp-tab active'
+                        historyTab.textContent = 'History'
+                        historyTab.dataset.testid = 'history-tab'
+
+                        const starredTab = document.createElement('button')
+                        starredTab.className = 'dp-tab'
+                        starredTab.textContent = 'Starred'
+                        starredTab.dataset.testid = 'starred-tab'
+
+                        tabs.appendChild(historyTab)
+                        tabs.appendChild(starredTab)
+                        portal.appendChild(tabs)
+
+                        // Tab panel (scrollable container)
+                        const panel = document.createElement('div')
+                        panel.className = 'dp-tab-panel'
+                        portal.appendChild(panel)
+
+                        function renderHistoryPanel() {
+                            panel.innerHTML = ''
                             const hist = queryHistory.val
-                            const starred = starredQueries.val
-
-                            // Recent section
-                            const recentHeader = document.createElement('div')
-                            recentHeader.className = 'dp-section-label'
-                            recentHeader.textContent = 'Recent'
-                            portal.appendChild(recentHeader)
-
                             if (hist.length === 0) {
                                 const empty = document.createElement('div')
                                 empty.className = 'dp-empty'
                                 empty.textContent = 'No history yet'
-                                portal.appendChild(empty)
+                                panel.appendChild(empty)
                             } else {
                                 for (const item of hist) {
                                     const row = document.createElement('button')
@@ -2185,26 +2240,19 @@
                                     row.textContent = item.query
                                     row.title = item.query
                                     row.addEventListener('click', () => loadQuery(item.query))
-                                    portal.appendChild(row)
+                                    panel.appendChild(row)
                                 }
                             }
+                        }
 
-                            // Divider
-                            const divider = document.createElement('div')
-                            divider.className = 'dp-divider'
-                            portal.appendChild(divider)
-
-                            // Starred section
-                            const starredHeader = document.createElement('div')
-                            starredHeader.className = 'dp-section-label'
-                            starredHeader.textContent = 'Starred'
-                            portal.appendChild(starredHeader)
-
+                        function renderStarredPanel() {
+                            panel.innerHTML = ''
+                            const starred = starredQueries.val
                             if (starred.length === 0) {
                                 const empty = document.createElement('div')
                                 empty.className = 'dp-empty'
                                 empty.textContent = 'No starred queries'
-                                portal.appendChild(empty)
+                                panel.appendChild(empty)
                             } else {
                                 for (const q of starred) {
                                     const row = document.createElement('button')
@@ -2219,11 +2267,24 @@
                                     row.appendChild(document.createTextNode(q))
                                     row.title = q
                                     row.addEventListener('click', () => loadQuery(q))
-                                    portal.appendChild(row)
+                                    panel.appendChild(row)
                                 }
                             }
                         }
-                        buildPanel()
+
+                        function setActiveTab(tab) {
+                            activeTab = tab
+                            historyTab.classList.toggle('active', tab === 'history')
+                            starredTab.classList.toggle('active', tab === 'starred')
+                            if (tab === 'history') renderHistoryPanel()
+                            else renderStarredPanel()
+                        }
+
+                        historyTab.addEventListener('click', () => setActiveTab('history'))
+                        starredTab.addEventListener('click', () => setActiveTab('starred'))
+
+                        // Initial render
+                        renderHistoryPanel()
                     }, {minWidth: '320px', align: 'end'})
                 },
             }, icon('history'))
