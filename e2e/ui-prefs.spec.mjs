@@ -6,11 +6,14 @@ import { test, expect } from '@playwright/test';
 import { setTimeout as delay } from 'timers/promises';
 import {
   clickFieldKey,
+  clickResetPreferences,
   expandCollapsedRow,
   expandRow,
   getHeaders,
+  getTimePresetValue,
   portForTestFile,
   readJSONLocalStorage,
+  selectTimePreset,
   startServer,
   stopServer,
 } from './helpers.mjs';
@@ -115,16 +118,14 @@ test.describe('ui-prefs', () => {
     await page.goto(baseURL);
     await expect(page.locator('[data-testid="time-preset"]')).toBeVisible({ timeout: 10_000 });
 
-    await page.selectOption('[data-testid="time-preset"]', '7d');
+    await selectTimePreset(page, '7d');
     await delay(600); // wait for debounced save
 
     await page.reload();
     await expect(page.locator('[data-testid="time-preset"]')).toBeVisible({ timeout: 10_000 });
     await delay(300);
 
-    const selectedValue = await page.evaluate(() =>
-      document.querySelector('[data-testid="time-preset"]')?.value ?? ''
-    );
+    const selectedValue = await getTimePresetValue(page);
     expect(selectedValue).toBe('7d');
   });
 
@@ -138,7 +139,7 @@ test.describe('ui-prefs', () => {
     await page.goto(baseURL);
     await expect(page.locator('[data-testid="time-preset"]')).toBeVisible({ timeout: 10_000 });
 
-    await page.selectOption('[data-testid="time-preset"]', 'custom');
+    await selectTimePreset(page, 'custom');
     await delay(300);
 
     const customStart = '2026-01-01T10:00';
@@ -151,14 +152,12 @@ test.describe('ui-prefs', () => {
     await expect(page.locator('[data-testid="time-preset"]')).toBeVisible({ timeout: 10_000 });
     await delay(300);
 
-    const selectedPreset = await page.evaluate(() =>
-      document.querySelector('[data-testid="time-preset"]')?.value ?? ''
-    );
+    const selectedPreset = await getTimePresetValue(page);
     expect(selectedPreset).toBe('custom');
 
     // Custom range should be visible
     const customVisible = await page.evaluate(() => {
-      const el = document.querySelector('.time-custom-range');
+      const el = document.querySelector('.time-custom-row');
       return !!(el && el.style.display !== 'none');
     });
     expect(customVisible).toBeTruthy();
@@ -180,9 +179,7 @@ test.describe('ui-prefs', () => {
     await page.goto(baseURL);
     await expect(page.locator('.log-row').first()).toBeVisible({ timeout: 10_000 });
 
-    const selectedPreset = await page.evaluate(() =>
-      document.querySelector('[data-testid="time-preset"]')?.value ?? ''
-    );
+    const selectedPreset = await getTimePresetValue(page);
     expect(selectedPreset).toBe('all');
 
     const headers = await getHeaders(page);
@@ -206,7 +203,7 @@ test.describe('ui-prefs', () => {
       sessionStorage.setItem(key, '1');
     });
     await page.goto(baseURL);
-    await expect(page.locator('[data-testid="reset-ui-prefs-btn"]')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('[data-testid="settings-btn"]')).toBeVisible({ timeout: 10_000 });
     // Wait for the table header to appear (rows may be empty with 1h preset on old data)
     await expect(page.locator('.log-table-header')).toBeVisible({ timeout: 10_000 });
 
@@ -214,13 +211,11 @@ test.describe('ui-prefs', () => {
     const headersBefore = await getHeaders(page);
     expect(headersBefore).toContain('service');
 
-    const presetBefore = await page.evaluate(() =>
-      document.querySelector('[data-testid="time-preset"]')?.value ?? ''
-    );
+    const presetBefore = await getTimePresetValue(page);
     expect(presetBefore).toBe('1h');
 
-    // Click reset
-    await page.click('[data-testid="reset-ui-prefs-btn"]');
+    // Click reset via settings dropdown
+    await clickResetPreferences(page);
     await delay(500);
 
     // UI prefs key should be gone (or empty)
@@ -232,9 +227,7 @@ test.describe('ui-prefs', () => {
     expect(headersAfter).not.toContain('service');
 
     // Time preset reset to 'all'
-    const presetAfter = await page.evaluate(() =>
-      document.querySelector('[data-testid="time-preset"]')?.value ?? ''
-    );
+    const presetAfter = await getTimePresetValue(page);
     expect(presetAfter).toBe('all');
 
     // Query history is preserved

@@ -64,7 +64,7 @@ export async function startServer(port, { rows = 40, lines = null } = {}) {
     ${inputCmd} | ${testBinPath} --port ${port} --no-browser --db-path ${testDbPath} --all --retention-days 0 --retention-size 10GB > ${testLogPath} 2>&1
   `;
 
-  const proc = spawn('sh', ['-c', cmd], { cwd: PROJECT_ROOT });
+  const proc = spawn('sh', ['-c', cmd], { cwd: PROJECT_ROOT, detached: true });
 
   const deadline = Date.now() + STARTUP_TIMEOUT_MS;
   while (Date.now() < deadline) {
@@ -88,14 +88,15 @@ export async function stopServer(proc) {
     return;
   }
 
-  proc.kill('SIGTERM');
+  // Kill the entire process group (the sh wrapper + the peek child binary)
+  try { process.kill(-proc.pid, 'SIGTERM'); } catch { proc.kill('SIGTERM'); }
   await Promise.race([
     once(proc, 'exit').catch(() => {}),
     delay(1_000),
   ]);
 
   if (proc.exitCode === null) {
-    proc.kill('SIGKILL');
+    try { process.kill(-proc.pid, 'SIGKILL'); } catch { proc.kill('SIGKILL'); }
     await Promise.race([
       once(proc, 'exit').catch(() => {}),
       delay(1_000),
@@ -249,4 +250,67 @@ export async function waitForQuery(page, payload, { timeout = 10_000, interval =
   }
 
   throw new Error(`Timed out waiting for /query: ${lastError?.message || 'unknown error'}`);
+}
+
+/**
+ * Map of preset values to their display labels in the time-range dropdown.
+ */
+const PRESET_LABELS = {
+  all: 'All time',
+  '15m': 'Last 15 minutes',
+  '1h': 'Last 1 hour',
+  '6h': 'Last 6 hours',
+  '24h': 'Last 24 hours',
+  '7d': 'Last 7 days',
+  today: 'Today',
+  yesterday: 'Yesterday',
+  custom: 'Custom range\u2026',
+};
+
+/**
+ * Select a time preset by opening the dropdown portal and clicking the item.
+ * @param {import('@playwright/test').Page} page
+ * @param {string} value - preset value key (e.g. '1h', '7d', 'custom', 'all')
+ */
+export async function selectTimePreset(page, value) {
+  const label = PRESET_LABELS[value];
+  if (!label) throw new Error(`Unknown time preset value: ${value}`);
+  await page.click('[data-testid="time-preset"]');
+  await page.waitForSelector('.dropdown-portal', { timeout: 3_000 });
+  await page.locator('.dropdown-portal .dp-item', { hasText: label }).click();
+  // Portal auto-closes on item click; wait briefly for DOM cleanup
+  await delay(150);
+}
+
+/**
+ * Read the current time-preset value from the button's data-value attribute.
+ * @param {import('@playwright/test').Page} page
+ * @returns {Promise<string>} Preset value (e.g. 'all', '1h', 'custom')
+ */
+export async function getTimePresetValue(page) {
+  return page.evaluate(() =>
+    document.querySelector('[data-testid="time-preset"]')?.dataset.value ?? ''
+  );
+}
+
+/**
+ * Execute a search query by filling the input and pressing Enter.
+ * @param {import('@playwright/test').Page} page
+ * @param {string} query
+ */
+export async function executeSearch(page, query) {
+  const searchInput = page.locator('.search-editor-input');
+  await searchInput.fill(query);
+  await searchInput.press('Enter');
+}
+
+/**
+ * Open the settings dropdown and click the reset preferences button.
+ * @param {import('@playwright/test').Page} page
+ */
+export async function clickResetPreferences(page) {
+  await page.click('[data-testid="settings-btn"]');
+  await page.waitForSelector('.dropdown-portal', { timeout: 3_000 });
+  await page.click('[data-testid="reset-ui-prefs-btn"]');
+  await delay(150);
 }

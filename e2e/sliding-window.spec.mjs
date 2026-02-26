@@ -4,7 +4,7 @@
 
 import { test, expect } from '@playwright/test';
 import { setTimeout as delay } from 'timers/promises';
-import { portForTestFile, startServer, stopServer } from './helpers.mjs';
+import { portForTestFile, selectTimePreset, startServer, stopServer } from './helpers.mjs';
 
 let server;
 let baseURL;
@@ -84,11 +84,7 @@ test.describe('sliding-window', () => {
 
     const baselineCount = queryCount;
 
-    await page.evaluate(() => {
-      const s = document.querySelector('[data-testid="time-preset"]');
-      s.value = '15m';
-      s.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    await selectTimePreset(page, '15m');
     await delay(700);
 
     const beforeRows = await page.evaluate(() => document.querySelectorAll('.log-row').length);
@@ -105,11 +101,7 @@ test.describe('sliding-window', () => {
     expect(queryCount).toBe(afterSelectCount);
 
     await page.evaluate(() => { window.__peekNowOffsetMs = 0; });
-    await page.evaluate(() => {
-      const s = document.querySelector('[data-testid="time-preset"]');
-      s.value = 'today';
-      s.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    await selectTimePreset(page, 'today');
     await delay(700);
 
     const todayRowsBefore = await page.evaluate(() => document.querySelectorAll('.log-row').length);

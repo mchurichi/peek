@@ -107,4 +107,72 @@ test.describe('table', () => {
     const drift = Math.abs(stickyMetrics.headerTop - stickyMetrics.containerTop);
     expect(drift).toBeLessThanOrEqual(3);
   });
+
+  test('preserves scroll position when dragging column to reorder', async ({ page }) => {
+    await page.goto(baseURL);
+    await delay(2000);
+
+    // First, pin two extra columns so we have something to drag
+    await expandRow(page);
+    await delay(500);
+    expect(await clickFieldKey(page, 'service')).toBeTruthy();
+    await delay(500);
+
+    await expandCollapsedRow(page);
+    await delay(500);
+    expect(await clickFieldKey(page, 'user_id')).toBeTruthy();
+    await delay(500);
+
+    const headers = await getHeaders(page);
+    expect(headers).toContain('service');
+    expect(headers).toContain('user_id');
+
+    // Scroll down to middle of log table
+    await setScroll(page, 400);
+    await delay(300);
+    const scrollBefore = await getScroll(page);
+    expect(scrollBefore).toBeGreaterThan(100);
+
+    // Find the "service" and "user_id" pinned column headers for drag operation
+    const serviceHeader = page.locator('.log-table-header .col-pinned[data-col="service"]');
+    const userIdHeader = page.locator('.log-table-header .col-pinned[data-col="user_id"]');
+
+    const serviceBox = await serviceHeader.boundingBox();
+    const userIdBox = await userIdHeader.boundingBox();
+    expect(serviceBox).not.toBeNull();
+    expect(userIdBox).not.toBeNull();
+
+    // Perform a slow drag from user_id column to service column.
+    // Drop inserts source before target, so this should swap their order.
+    // Hover ABOVE headers briefly to trigger attempted auto-scroll, then drop on target.
+    const startX = userIdBox.x + userIdBox.width / 2;
+    const startY = userIdBox.y + userIdBox.height / 2;
+    const endX = serviceBox.x + serviceBox.width / 2;
+    const hoverY = serviceBox.y - 10;
+    const dropY = serviceBox.y + serviceBox.height / 2;
+
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    // Drag slowly with many steps, moving upward to trigger auto-scroll
+    await page.mouse.move(endX, hoverY, { steps: 30 });
+    // Hold above the column for 500ms to trigger auto-scroll
+    await delay(500);
+    await page.mouse.move(endX, dropY, { steps: 6 });
+    await page.mouse.up();
+    await delay(500);
+
+    // Verify scroll position is preserved (strict — scroll should be actively locked during drag)
+    const scrollAfter = await getScroll(page);
+    const scrollDrift = Math.abs(scrollAfter - scrollBefore);
+    expect(scrollDrift).toBeLessThanOrEqual(5);
+
+    // Verify pinned order changed.
+    const pinnedAfter = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('.log-table-header .col-pinned'))
+        .map((el) => el.getAttribute('data-col'))
+        .filter(Boolean)
+    );
+    expect(pinnedAfter).toEqual(expect.arrayContaining(['service', 'user_id']));
+    expect(pinnedAfter.indexOf('user_id')).toBeLessThan(pinnedAfter.indexOf('service'));
+  });
 });

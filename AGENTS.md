@@ -29,6 +29,10 @@ mise exec -- npx playwright test e2e/search-caret.spec.mjs
 mise exec -- npx playwright test e2e/sliding-window.spec.mjs
 mise exec -- npx playwright test e2e/field-filter-append.spec.mjs
 mise exec -- npx playwright test e2e/query-history.spec.mjs
+mise exec -- npx playwright test e2e/datetime.spec.mjs
+mise exec -- npx playwright test e2e/levelless.spec.mjs
+mise exec -- npx playwright test e2e/copy.spec.mjs
+mise exec -- npx playwright test e2e/ui-prefs.spec.mjs
 
 # Manual test log generation
 mise exec -- node e2e/loggen.mjs --count 200
@@ -59,6 +63,10 @@ e2e/search-caret.spec.mjs  Search caret/overlay alignment
 e2e/sliding-window.spec.mjs Sliding time presets via client-side window pruning
 e2e/field-filter-append.spec.mjs Field-value click appends safe Lucene token to query
 e2e/query-history.spec.mjs Query history and starred queries (localStorage, shortcuts, dropdowns)
+e2e/datetime.spec.mjs      Datetime range picker UI and API integration
+e2e/levelless.spec.mjs     Levelless log entries rendering and filtering
+e2e/copy.spec.mjs          Row copy button and field-value click-to-filter
+e2e/ui-prefs.spec.mjs      Persistent UI preferences (columns, widths, time preset, reset)
 e2e/screenshot.mjs         Screenshot generator with realistic data
 e2e/loggen.mjs             Manual test-data log generator (json/logfmt/mixed)
 .github/workflows/ci-build-test.yml   CI pipeline (build, vet, unit tests, E2E tests)
@@ -113,6 +121,11 @@ BadgerDB keys: `log:{timestamp_nano}:{id}` — enables time-range key seeking.
 - Column resize: drag handles manipulate `gridTemplateColumns`
 - Search bar: transparent `<input>` over a syntax-highlight `<div>` (`.search-highlight`) for Lucene token coloring
 - Autocomplete dropdown (`.search-autocomplete`) populated from `/fields` API; dismiss with Escape, navigate with arrow keys, accept with Tab/Enter
+- Dropdown portal pattern: `openDropdown(triggerEl, buildFn, opts)` appends to `document.body`, positions via `getBoundingClientRect()`, dismisses on outside click/Escape
+- Time presets are dropdown-based buttons (`[data-testid="time-preset"]` with `data-value` attribute), not `<select>` elements
+- Theme system: CSS custom properties on `:root` (dark) with `.light` overrides; toggle via `applyTheme()`/`toggleTheme()`
+- Density modes: `.density-compact` / `.density-comfortable` CSS classes with per-density token overrides
+- Inline SVG icon registry: `ICONS` object with Lucide icon paths, rendered via `icon(name, cls)` helper
 - Relative time presets (`15m`, `1h`, `6h`, `24h`, `7d`) slide client-side by pruning stale rows on a 1s timer (2m grace), without periodic `/query` polling
 
 ### E2E Tests
@@ -121,6 +134,7 @@ BadgerDB keys: `log:{timestamp_nano}:{id}` — enables time-range key seeking.
 - Wrapper script: `e2e/run.sh` delegates to `npx playwright test`
 - Default base test port: `9997` (override with `PEEK_E2E_BASE_PORT`)
 - Deterministic port formula: `base + workerIndex*100 + fileOffset`
+- Shared helpers include `selectTimePreset()`, `getTimePresetValue()`, `executeSearch()`, `clickResetPreferences()` for dropdown-based UI interactions
 - Screenshots: `/tmp/peek-test-*.png`
 
 ## Critical Rules
