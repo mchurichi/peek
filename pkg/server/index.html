@@ -1650,6 +1650,10 @@
             buildContentFn(portal)
             document.body.appendChild(portal)
 
+            // Keep portal width within viewport so horizontal clamping can succeed.
+            const maxPortalWidth = Math.max(120, window.innerWidth - 16)
+            portal.style.maxWidth = maxPortalWidth + 'px'
+
             // Position relative to trigger
             const rect = triggerEl.getBoundingClientRect()
             const pw = portal.offsetWidth
