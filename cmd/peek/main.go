@@ -63,6 +63,9 @@ func main() {
 		printHelp()
 		return
 	}
+	if err := validateNoPositionalArgs(flag.Args()); err != nil {
+		log.Fatalf("%v (use --help)", err)
+	}
 
 	// Determine mode based on stdin.
 	mode := "server" // Default mode (browse stored logs)
@@ -174,6 +177,13 @@ func printVersion() {
 func isStdinPiped() bool {
 	stat, _ := os.Stdin.Stat()
 	return (stat.Mode() & os.ModeCharDevice) == 0
+}
+
+func validateNoPositionalArgs(args []string) error {
+	if len(args) == 0 {
+		return nil
+	}
+	return fmt.Errorf("unknown argument(s): %s", strings.Join(args, " "))
 }
 
 func runDbCommand(args []string) error {
