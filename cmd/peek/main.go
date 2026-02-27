@@ -306,7 +306,11 @@ func runDbClean(args []string) error {
 		// Count entries to delete
 		if count, ok := stats.Levels[*level]; ok {
 			deleteCount = count
-			confirmMsg = fmt.Sprintf("This will delete %d log entries with level %s (%.2f MB estimated). Continue?", count, *level, stats.DBSizeMB*(float64(count)/float64(stats.TotalLogs)))
+			estimatedSize := 0.0
+			if stats.TotalLogs > 0 {
+				estimatedSize = stats.DBSizeMB * (float64(count) / float64(stats.TotalLogs))
+			}
+			confirmMsg = fmt.Sprintf("This will delete %d log entries with level %s (%.2f MB estimated) and then attempt to reclaim disk space. Continue?", count, *level, estimatedSize)
 		} else {
 			fmt.Printf("No logs found with level %s\n", *level)
 			return nil
@@ -317,11 +321,11 @@ func runDbClean(args []string) error {
 		if err != nil {
 			return fmt.Errorf("invalid duration: %w", err)
 		}
-		confirmMsg = fmt.Sprintf("This will delete logs older than %s. Continue?", duration)
+		confirmMsg = fmt.Sprintf("This will delete logs older than %s and then attempt to reclaim disk space. Continue?", duration)
 	} else {
 		// Delete all
 		deleteCount = stats.TotalLogs
-		confirmMsg = fmt.Sprintf("This will delete all %d log entries (%.2f MB). Continue?", deleteCount, stats.DBSizeMB)
+		confirmMsg = fmt.Sprintf("This will delete all %d log entries (%.2f MB) and then reclaim disk space. Continue?", deleteCount, stats.DBSizeMB)
 	}
 
 	// Confirm deletion
@@ -357,12 +361,38 @@ func runDbClean(args []string) error {
 		}
 	}
 
-	// Compact database
-	if err := db.CompactDatabase(); err != nil {
-		log.Printf("Warning: Failed to compact database: %v", err)
+	fmt.Printf("Deleted %d entries.\n", deleted)
+
+	// Compact database until there is no more reclaimable value-log data.
+	compaction, err := db.CompactDatabaseFully()
+	if err != nil {
+		log.Printf("Warning: Failed to fully compact database: %v", err)
 	}
 
-	fmt.Printf("✅ Deleted %d entries. Database compacted.\n", deleted)
+	beforeMB := float64(compaction.BeforeBytes) / (1024 * 1024)
+	afterMB := float64(compaction.AfterBytes) / (1024 * 1024)
+	reclaimedMB := float64(compaction.ReclaimedBytes) / (1024 * 1024)
+	passWord := "passes"
+	if compaction.Passes == 1 {
+		passWord = "pass"
+	}
+
+	if err != nil {
+		fmt.Printf("Compaction stopped early after %d GC %s (current size %.2f MB).\n", compaction.Passes, passWord, afterMB)
+		return nil
+	}
+
+	if compaction.Passes == 0 {
+		fmt.Printf("No additional disk space reclaimable right now (size %.2f MB).\n", afterMB)
+		return nil
+	}
+
+	if compaction.ReclaimedBytes > 0 {
+		fmt.Printf("Reclaimed %.2f MB in %d GC %s (%.2f MB -> %.2f MB).\n", reclaimedMB, compaction.Passes, passWord, beforeMB, afterMB)
+		return nil
+	}
+
+	fmt.Printf("Compaction ran %d GC %s; size unchanged at %.2f MB.\n", compaction.Passes, passWord, afterMB)
 	return nil
 }
 
