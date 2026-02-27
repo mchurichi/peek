@@ -31,4 +31,4 @@ checksum:
   name_template: checksums.txt
 
 changelog:
-  sort: desc
+  use: github-native
