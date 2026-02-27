@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,6 +27,14 @@ type BadgerStorage struct {
 	cleanupInterval int
 	cleanupChan     chan struct{}
 	doneChan        chan struct{}
+}
+
+// CompactionResult describes a compaction run.
+type CompactionResult struct {
+	Passes         int
+	BeforeBytes    int64
+	AfterBytes     int64
+	ReclaimedBytes int64
 }
 
 // Config holds storage configuration
@@ -573,6 +582,41 @@ func (s *BadgerStorage) DeleteOlderThan(cutoff time.Time) (int, error) {
 // CompactDatabase runs garbage collection to reclaim disk space
 func (s *BadgerStorage) CompactDatabase() error {
 	return s.db.RunValueLogGC(0.5)
+}
+
+// CompactDatabaseFully runs value-log GC until there is nothing left to rewrite.
+func (s *BadgerStorage) CompactDatabaseFully() (CompactionResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var res CompactionResult
+	lsmBefore, vlogBefore := s.db.Size()
+	res.BeforeBytes = lsmBefore + vlogBefore
+
+	for {
+		err := s.db.RunValueLogGC(0.5)
+		if err == nil {
+			res.Passes++
+			continue
+		}
+		if errors.Is(err, badger.ErrNoRewrite) {
+			break
+		}
+		lsmNow, vlogNow := s.db.Size()
+		res.AfterBytes = lsmNow + vlogNow
+		if res.AfterBytes < res.BeforeBytes {
+			res.ReclaimedBytes = res.BeforeBytes - res.AfterBytes
+		}
+		return res, err
+	}
+
+	lsmAfter, vlogAfter := s.db.Size()
+	res.AfterBytes = lsmAfter + vlogAfter
+	if res.AfterBytes < res.BeforeBytes {
+		res.ReclaimedBytes = res.BeforeBytes - res.AfterBytes
+	}
+
+	return res, nil
 }
 
 // GetDBPath returns the database path

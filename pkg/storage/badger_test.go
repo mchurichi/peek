@@ -106,12 +106,12 @@ func TestBadgerStorage_Query(t *testing.T) {
 	}
 
 	tests := []struct {
-		name       string
-		filter     Filter
-		limit      int
-		offset     int
-		wantCount  int
-		wantTotal  int
+		name      string
+		filter    Filter
+		limit     int
+		offset    int
+		wantCount int
+		wantTotal int
 	}{
 		{
 			name:      "all entries",
@@ -408,6 +408,34 @@ func TestBadgerStorage_EmptyDB(t *testing.T) {
 
 	if stats.TotalLogs != 0 {
 		t.Errorf("GetStats() on empty DB TotalLogs = %d, want 0", stats.TotalLogs)
+	}
+}
+
+func TestBadgerStorage_CompactDatabaseFully_EmptyDB(t *testing.T) {
+	dbPath := t.TempDir()
+
+	cfg := Config{
+		DBPath:        dbPath,
+		RetentionSize: 1024 * 1024 * 100,
+		RetentionDays: 7,
+	}
+
+	storage, err := NewBadgerStorage(cfg)
+	if err != nil {
+		t.Fatalf("NewBadgerStorage() error = %v", err)
+	}
+	defer storage.Close()
+
+	res, err := storage.CompactDatabaseFully()
+	if err != nil {
+		t.Fatalf("CompactDatabaseFully() error = %v", err)
+	}
+
+	if res.Passes != 0 {
+		t.Errorf("CompactDatabaseFully() passes = %d, want 0 on empty DB", res.Passes)
+	}
+	if res.BeforeBytes < 0 || res.AfterBytes < 0 || res.ReclaimedBytes < 0 {
+		t.Errorf("CompactDatabaseFully() returned negative sizes: %+v", res)
 	}
 }
 
