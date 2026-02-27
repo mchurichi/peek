@@ -4,7 +4,8 @@
 *.dll
 *.so
 *.dylib
-peek
+/peek
+/peek.exe
 
 # Test binary, built with `go test -c`
 *.test
