@@ -39,9 +39,10 @@ func main() {
 				log.Fatalf("DB command error: %v", err)
 			}
 			return
-		case "server":
-			// Handle server subcommand
-			os.Args = append([]string{os.Args[0]}, args[1:]...)
+		default:
+			if !strings.HasPrefix(args[0], "-") {
+				log.Fatalf("Unknown command: %s (use --help)", args[0])
+			}
 		}
 	}
 
@@ -51,7 +52,7 @@ func main() {
 	retentionSize := flag.String("retention-size", "", "Max storage size (e.g., 1GB, 500MB)")
 	retentionDays := flag.Int("retention-days", 0, "Max age of logs in days")
 	format := flag.String("format", "auto", "Log format: auto, json, logfmt")
-	port := flag.Int("port", 0, "HTTP server port (for server mode)")
+	port := flag.Int("port", 0, "HTTP server port")
 	noBrowser := flag.Bool("no-browser", false, "Don't auto-open browser")
 	all := flag.Bool("all", false, "Show all historic logs (collect mode only)")
 	help := flag.Bool("help", false, "Show help")
@@ -63,15 +64,10 @@ func main() {
 		return
 	}
 
-	// Determine mode based on stdin and args
-	mode := "collect" // Default mode
-	if len(args) > 0 && args[0] == "server" {
-		mode = "server"
-	} else if isStdinPiped() {
+	// Determine mode based on stdin.
+	mode := "server" // Default mode (browse stored logs)
+	if isStdinPiped() {
 		mode = "collect"
-	} else if len(flag.Args()) == 0 {
-		// No args and no stdin, default to server
-		mode = "server"
 	}
 
 	// Load configuration
@@ -118,7 +114,7 @@ func printHelp() {
 USAGE:
     peek version                         Print build version
     cat app.log | peek [OPTIONS]         Collect logs from stdin (+ embedded web UI)
-    peek server [OPTIONS]                Start web server (browse previously collected logs)
+    peek [OPTIONS]                       Start web UI (browse previously collected logs)
     peek db stats                        Show database info
     peek db clean [OPTIONS]              Delete logs from database
 
@@ -132,7 +128,7 @@ COLLECT OPTIONS:
     --port PORT            HTTP port for web UI (default: 8080)
     --no-browser           Don't auto-open browser
 
-SERVER OPTIONS:
+STANDALONE OPTIONS:
     --config FILE      Path to config file (default: ~/.peek/config.toml)
     --db-path PATH     Database path (default: ~/.peek/db)
     --port PORT        HTTP port (default: 8080)
@@ -154,7 +150,7 @@ EXAMPLES:
     kubectl logs my-pod -f | peek --port 8081
 
     # Browse previously collected logs
-    peek server
+    peek
 
     # Show database info
     peek db stats

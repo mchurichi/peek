@@ -69,10 +69,10 @@ After stdin closes, the server stays alive so you can keep browsing — press `C
 
 ### Browse Previously Collected Logs
 
-Start the web UI in standalone server mode to browse all stored logs:
+Start the web UI in standalone mode to browse all stored logs:
 
 ```bash
-peek server
+peek
 ```
 
 ### Database Management
@@ -125,12 +125,12 @@ Options:
   --help                 Show help
 ```
 
-### Server Mode
+### Standalone Mode
 
 Browse previously collected logs (no stdin required):
 
 ```bash
-peek server [OPTIONS]
+peek [OPTIONS]
 
 Options:
   --config FILE      Path to config file (default: ~/.peek/config.toml)
@@ -274,7 +274,7 @@ Full architecture and API details are in [docs/README.md](docs/README.md).
 kubectl logs my-pod -f | peek --port 8081
 
 # Browse logs after collection ends
-peek server
+peek
 
 # Collect more logs (same database)
 cat another-app.log | peek
