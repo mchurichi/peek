@@ -27,7 +27,7 @@ This folder contains deeper documentation for Peek.
                    ↑
                    │
         ┌──────────────────────┐
-        │ peek server          │
+        │ peek                 │
         │ (standalone mode)    │
         │ Browse collected logs│
         └──────────────────────┘

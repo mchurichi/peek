@@ -14,8 +14,8 @@ mise exec -- go run ./cmd/peek version
 # Collect mode (pipe stdin + web UI)
 cat app.log | mise exec -- go run ./cmd/peek --port 8080
 
-# Server mode (browse stored logs)
-mise exec -- go run ./cmd/peek server
+# Standalone mode (browse stored logs)
+mise exec -- go run ./cmd/peek
 
 # E2E tests (requires Playwright)
 mise exec -- npm run test:e2e
@@ -44,7 +44,7 @@ No linter or formatter is configured yet. Use `mise exec -- go vet ./...` for ba
 ## Project Structure
 
 ```
-cmd/peek/main.go          CLI entry point, flag parsing, collect/server routing
+cmd/peek/main.go          CLI entry point, flag parsing, collect/standalone routing
 internal/config/config.go  TOML config, defaults, size parsing
 pkg/parser/detector.go     Auto-detection of log formats (JSON, logfmt)
 pkg/parser/parser.go       JSON and logfmt parsers
