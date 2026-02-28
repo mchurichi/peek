@@ -27,6 +27,24 @@ $ kubectl logs -l app=frontdesk -w | peek
 ## Installation
 
 ```bash
+# Linux quick install (latest) to ~/.local/bin
+curl -fsSL https://raw.githubusercontent.com/mchurichi/peek/main/scripts/get-peek.sh | sh -s -- install
+
+# Linux quick install (specific version)
+curl -fsSL https://raw.githubusercontent.com/mchurichi/peek/main/scripts/get-peek.sh | sh -s -- install --version v0.1.0
+
+# Linux system install to /usr/local/bin (uses sudo when needed)
+curl -fsSL https://raw.githubusercontent.com/mchurichi/peek/main/scripts/get-peek.sh | sh -s -- install --system
+
+# Linux uninstall (remove binary only)
+curl -fsSL https://raw.githubusercontent.com/mchurichi/peek/main/scripts/get-peek.sh | sh -s -- uninstall
+
+# Linux uninstall + remove all ~/.peek data/config
+curl -fsSL https://raw.githubusercontent.com/mchurichi/peek/main/scripts/get-peek.sh | sh -s -- uninstall --purge
+
+# Linux uninstall + purge non-interactively
+curl -fsSL https://raw.githubusercontent.com/mchurichi/peek/main/scripts/get-peek.sh | sh -s -- uninstall --purge --force
+
 # Build from source
 git clone https://github.com/mchurichi/peek.git
 cd peek
@@ -316,6 +334,8 @@ peek/
 │   └── server/         # HTTP server, WebSocket, embedded UI (index.html)
 ├── internal/
 │   └── config/         # Configuration management
+├── scripts/
+│   └── get-peek.sh     # Linux install/uninstall script for GitHub release binaries
 └── go.mod
 ```
 

@@ -97,6 +97,27 @@ WebSocket endpoint for real-time log streaming
 - **Storage**: Efficient compression with BadgerDB
 - **Binary**: <20MB
 
+## Linux Installer Script
+
+`scripts/get-peek.sh` provides Linux install/uninstall for release artifacts published on GitHub Releases.
+
+- Shell target: POSIX `sh` (do not introduce bash-only syntax).
+- Supported architectures: `amd64` and `arm64`.
+- Default install directory: `~/.local/bin`.
+- System install: `--system` targets `/usr/local/bin` (uses `sudo` when needed).
+- `uninstall` command removes the installed binary.
+- Optional `--purge` removes all `~/.peek` data and config after confirmation.
+- Use `--purge --force` for non-interactive purge automation.
+
+The installer depends on GoReleaser archive naming and checksums:
+
+- Release tag: `vX.Y.Z`
+- Primary archive lookup: `peek_X.Y.Z_linux_<arch>.tar.gz` (no `v` prefix)
+- Fallback archive lookup: `peek_vX.Y.Z_linux_<arch>.tar.gz`
+- Checksums file: `checksums.txt`
+
+If `.goreleaser.yml` changes these names, update `scripts/get-peek.sh` in the same change.
+
 ## Developer Test Data Generator
 
 This section is for development/testing workflows only; end-user usage stays in `/README.md`.
