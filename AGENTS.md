@@ -37,6 +37,11 @@ mise exec -- npx playwright test e2e/ui-prefs.spec.mjs
 # Manual test log generation
 mise exec -- node e2e/loggen.mjs --count 200
 mise exec -- bash -lc 'node e2e/loggen.mjs --follow --rate 20 | go run ./cmd/peek --all --no-browser'
+
+# Linux install script (release binaries)
+curl -fsSL https://raw.githubusercontent.com/mchurichi/peek/main/scripts/get-peek.sh | sh -s -- install
+curl -fsSL https://raw.githubusercontent.com/mchurichi/peek/main/scripts/get-peek.sh | sh -s -- uninstall
+curl -fsSL https://raw.githubusercontent.com/mchurichi/peek/main/scripts/get-peek.sh | sh -s -- uninstall --purge --force
 ```
 
 No linter or formatter is configured yet. Use `mise exec -- go vet ./...` for basic checks.
@@ -75,6 +80,7 @@ e2e/loggen.mjs             Manual test-data log generator (json/logfmt/mixed)
 .github/workflows/release-create-tag-from-merged-pr-label.yml Run main-branch CI then create SemVer tag from merged PR release label
 .github/workflows/release-publish-artifacts-from-tag.yml Publish GitHub Release artifacts on SemVer tag push
 .github/scripts/release-utils.cjs Shared release-label and SemVer helper functions for workflows
+scripts/get-peek.sh        Linux install/uninstall script for GitHub release binaries
 .goreleaser.yml            GoReleaser build/archive/checksum config
 ```
 
@@ -151,5 +157,6 @@ BadgerDB keys: `log:{timestamp_nano}:{id}` — enables time-range key seeking.
 - **Run Go and test commands via mise**: use `mise exec -- ...` for `go`, `node`, and `npm` commands documented here
 - **Docs boundary**: `/README.md` is consumer-facing usage; `/docs/README.md` is technical/developer/testing guidance
 - **Technical utilities docs**: document tools like `e2e/loggen.mjs` in `/docs/README.md`, not `/README.md`
+- **Installer script compatibility**: keep `scripts/get-peek.sh` POSIX `sh` and aligned with GoReleaser asset names/checksum output
 - **Keep AGENTS.md up to date**: any change that alters build commands, project structure, dependencies, architecture, conventions, or critical rules documented here MUST include a corresponding update to this file in the same commit
 - **Release labels are mandatory for PRs**: exactly one of `release:patch`, `release:minor`, `release:major`, or `skip-release` is required before merge
