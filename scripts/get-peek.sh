@@ -220,7 +220,7 @@ confirm_purge() {
     return 0
   fi
 
-  if [ ! -t 1 ] || [ ! -e /dev/tty ]; then
+  if [ ! -e /dev/tty ] || ! ( : < /dev/tty ) 2>/dev/null || ! ( : > /dev/tty ) 2>/dev/null; then
     fail "uninstall --purge requires confirmation. Re-run with --force in non-interactive mode."
   fi
 
