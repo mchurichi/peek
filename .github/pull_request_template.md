@@ -9,7 +9,7 @@
 <!-- Why was this change needed? -->
 
 ## Related Issue
-<!-- If this PR closes an issue, use: Closes #123 -->
+<!-- If this PR closes an issue, use: Closes #123, N/A otherwise -->
 
 ## Testing Done
 <!-- How did you verify it works? -->
