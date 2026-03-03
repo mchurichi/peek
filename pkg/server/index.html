@@ -32,6 +32,7 @@
             --peek-red: #ef4444;
             --peek-amber: #f59e0b;
             --peek-blue: #38bdf8;
+            --peek-purple: #a78bfa;
             --peek-gray: #6b7280;
             --peek-dim: #4b5060;
 
@@ -150,6 +151,7 @@
             --peek-red: #ef4444;
             --peek-amber: #d97706;
             --peek-blue: #2563eb;
+            --peek-purple: #7c3aed;
             --peek-gray: #9ca3af;
             --peek-dim: #d1d5db;
 
@@ -420,6 +422,7 @@
         .hl-quote    { color: var(--peek-green); }
         .hl-wildcard { color: var(--peek-amber); font-style: italic; }
         .hl-range    { color: var(--peek-green); }
+        .hl-regex    { color: var(--peek-purple); }
         .hl-paren    { color: var(--muted-foreground); }
         .hl-error    { color: var(--peek-red); text-decoration: underline wavy var(--peek-red); }
 
@@ -1768,17 +1771,17 @@
         // Lucene syntax tokenizer & highlighter
         // ──────────────────────────────────────────
 
-        // Sub-tokenize a value string for wildcard (*) spans
+        // Sub-tokenize a value string for wildcard (* and ?) spans
         function tokenizeValue(val) {
             const parts = []
             let i = 0
             while (i < val.length) {
                 let j = i
-                while (j < val.length && val[j] !== '*') j++
+                while (j < val.length && val[j] !== '*' && val[j] !== '?') j++
                 if (j > i) parts.push({type: 'value', text: val.slice(i, j)})
                 if (j < val.length) {
                     let k = j
-                    while (k < val.length && val[k] === '*') k++
+                    while (k < val.length && (val[k] === '*' || val[k] === '?')) k++
                     parts.push({type: 'wildcard', text: val.slice(j, k)})
                     j = k
                 }
@@ -1857,8 +1860,28 @@
                 }
 
                 // Word token (field:value, operator, or bare value)
+                // Special handling: when a regex literal is present (field:/regex/),
+                // the word reader must not stop at ( or ) inside the regex.
                 let j = i
-                while (j < text.length && !/[\s"()\[\]{}]/.test(text[j])) j++
+                let inRegex = false  // true once we have consumed the opening "/"
+                while (j < text.length) {
+                    const c = text[j]
+                    if (inRegex) {
+                        // Inside regex: consume everything until the closing "/"
+                        if (c === '/') { j++; inRegex = false; break }
+                        j++
+                    } else {
+                        // Normal word: stop at whitespace or grouping chars
+                        if (/[\s"()\[\]{}]/.test(c)) break
+                        // Detect field:/ transition; consume both chars and enter regex mode
+                        if (c === ':' && j + 1 < text.length && text[j + 1] === '/') {
+                            inRegex = true
+                            j += 2 // consume :/
+                        } else {
+                            j++
+                        }
+                    }
+                }
                 const word = text.slice(i, j)
                 i = j
                 if (!word) { i++; continue }
@@ -1868,14 +1891,30 @@
                 } else {
                     const colonIdx = word.indexOf(':')
                     if (colonIdx > 0) {
-                        tokens.push({type: 'field', text: word.slice(0, colonIdx)})
+                        // Handle +/- required/prohibited prefix operators
+                        let fieldPart = word.slice(0, colonIdx)
+                        if (fieldPart[0] === '+' || fieldPart[0] === '-') {
+                            tokens.push({type: 'op', text: fieldPart[0]})
+                            fieldPart = fieldPart.slice(1)
+                        }
+                        if (fieldPart) tokens.push({type: 'field', text: fieldPart})
                         tokens.push({type: 'colon', text: ':'})
                         const val = word.slice(colonIdx + 1)
-                        if (val) {
+                        if (!val) {
+                            // nothing after colon
+                        } else if (val.startsWith('/')) {
+                            tokens.push({type: 'regex', text: val})
+                        } else {
                             for (const t of tokenizeValue(val)) tokens.push(t)
                         }
                     } else {
-                        for (const t of tokenizeValue(word)) tokens.push(t)
+                        // Handle +/- prefix for bare keywords
+                        let bareWord = word
+                        if (bareWord[0] === '+' || bareWord[0] === '-') {
+                            tokens.push({type: 'op', text: bareWord[0]})
+                            bareWord = bareWord.slice(1)
+                        }
+                        for (const t of tokenizeValue(bareWord)) tokens.push(t)
                     }
                 }
             }
@@ -1906,6 +1945,7 @@
                     case 'quote':    return `<span class="hl-quote">${e}</span>`
                     case 'wildcard': return `<span class="hl-wildcard">${e}</span>`
                     case 'range':    return `<span class="hl-range">${e}</span>`
+                    case 'regex':    return `<span class="hl-regex">${e}</span>`
                     case 'paren':    return `<span class="hl-paren">${e}</span>`
                     case 'error':    return `<span class="hl-error">${e}</span>`
                     default:         return e

@@ -146,6 +146,22 @@ func (p *parser) parsePrimary() (Filter, error) {
 		return filter, nil
 	}
 
+	// Handle required (+) prefix — Lucene semantics: clause is required (same as default AND).
+	if p.peekChar('+') {
+		p.consume(1)
+		return p.parsePrimary()
+	}
+
+	// Handle prohibited (-) prefix — Lucene semantics: clause must NOT match.
+	if p.peekChar('-') {
+		p.consume(1)
+		filter, err := p.parsePrimary()
+		if err != nil {
+			return nil, err
+		}
+		return &NotFilter{Filter: filter}, nil
+	}
+
 	// Parse field:value or keyword
 	token := p.readToken()
 	if token == "" {
@@ -163,22 +179,86 @@ func (p *parser) parsePrimary() (Filter, error) {
 			return p.parseRange(field, value)
 		}
 
-		// Handle quoted strings
+		// Handle quoted strings (phrase match)
 		if strings.HasPrefix(value, "\"") {
 			value = strings.Trim(value, "\"")
 			return &FieldFilter{Field: field, Value: value, Exact: true}, nil
 		}
 
-		// Handle wildcards
-		if strings.Contains(value, "*") {
+		// Handle regex values: field:/regex/
+		if strings.HasPrefix(value, "/") {
+			regexStr := p.extractRegex(value)
+			re, err := regexp.Compile(regexStr)
+			if err != nil {
+				return nil, fmt.Errorf("invalid regex: %w", err)
+			}
+			return &RegexFilter{Field: field, Regex: re}, nil
+		}
+
+		// Strip boost suffix (^n) — accepted but ignored for filtering
+		value = stripBoost(value)
+
+		// Handle existence: field:*
+		if value == "*" {
+			return &ExistenceFilter{Field: field}, nil
+		}
+
+		// Handle wildcards (* and ?)
+		if strings.ContainsAny(value, "*?") {
 			return &WildcardFilter{Field: field, Pattern: value}, nil
 		}
 
 		return &FieldFilter{Field: field, Value: value, Exact: false}, nil
 	}
 
+	// Strip boost from bare keyword
+	token = stripBoost(token)
+	if token == "" {
+		return &AllFilter{}, nil
+	}
+
+	// Bare quoted phrase — search message and fields for the phrase
+	if len(token) >= 2 && token[0] == '"' && token[len(token)-1] == '"' {
+		return &KeywordFilter{Keyword: token[1 : len(token)-1]}, nil
+	}
+
 	// Keyword search (searches message and fields)
 	return &KeywordFilter{Keyword: token}, nil
+}
+
+// extractRegex extracts the regex string from a value that starts with "/".
+// If the value already ends with "/" (complete token), the content between
+// the slashes is returned. Otherwise, additional characters are consumed
+// from the parser input until the closing "/" is found — this handles regex
+// patterns that were cut short by "(" or ")" in the token reader.
+func (p *parser) extractRegex(value string) string {
+	// Complete regex already captured (e.g. "/regex/")
+	if len(value) >= 2 && value[len(value)-1] == '/' {
+		return value[1 : len(value)-1]
+	}
+	// Partial — strip leading "/" and continue reading until closing "/"
+	regexStr := value[1:]
+	for p.pos < len(p.input) {
+		ch := p.input[p.pos]
+		if ch == '/' {
+			p.pos++ // consume closing /
+			break
+		}
+		regexStr += string(ch)
+		p.pos++
+	}
+	return regexStr
+}
+
+// stripBoost removes a trailing "^number" boosting suffix from a token.
+// Boosting is accepted for query-string compatibility but ignored for filtering.
+func stripBoost(s string) string {
+	if idx := strings.LastIndex(s, "^"); idx > 0 {
+		if _, err := strconv.ParseFloat(s[idx+1:], 64); err == nil {
+			return s[:idx]
+		}
+	}
+	return s
 }
 
 func (p *parser) parseRange(field, rangeStr string) (Filter, error) {
@@ -428,7 +508,7 @@ func (f *KeywordFilter) Match(entry *storage.LogEntry) bool {
 	return false
 }
 
-// WildcardFilter matches field values with wildcards
+// WildcardFilter matches field values with wildcards (* and ?)
 type WildcardFilter struct {
 	Field   string
 	Pattern string
@@ -450,11 +530,56 @@ func (f *WildcardFilter) Match(entry *storage.LogEntry) bool {
 		}
 	}
 
-	// Convert wildcard pattern to regex
+	// Convert wildcard pattern to regex (* → .*, ? → .)
 	pattern := strings.ReplaceAll(f.Pattern, "*", ".*")
+	pattern = strings.ReplaceAll(pattern, "?", ".")
 	pattern = "^" + pattern + "$"
 	matched, _ := regexp.MatchString("(?i)"+pattern, value)
 	return matched
+}
+
+// ExistenceFilter matches entries where the specified field is present.
+// For built-in fields (level, message) it matches when the value is non-empty.
+// For custom fields it matches when the key exists in the entry's Fields map.
+type ExistenceFilter struct {
+	Field string
+}
+
+func (f *ExistenceFilter) Match(entry *storage.LogEntry) bool {
+	switch f.Field {
+	case "level":
+		return entry.Level != ""
+	case "message":
+		return entry.Message != ""
+	default:
+		_, ok := entry.Fields[f.Field]
+		return ok
+	}
+}
+
+// RegexFilter matches entries where the field value matches the given regular expression.
+type RegexFilter struct {
+	Field string
+	Regex *regexp.Regexp
+}
+
+func (f *RegexFilter) Match(entry *storage.LogEntry) bool {
+	var value string
+
+	switch f.Field {
+	case "level":
+		value = entry.Level
+	case "message":
+		value = entry.Message
+	default:
+		if v, ok := entry.Fields[f.Field]; ok {
+			value = fmt.Sprintf("%v", v)
+		} else {
+			return false
+		}
+	}
+
+	return f.Regex.MatchString(value)
 }
 
 // TimestampRangeFilter filters by timestamp range
