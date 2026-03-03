@@ -1863,14 +1863,17 @@
                 // Special handling: when a regex literal is present (field:/regex/),
                 // the word reader must not stop at ( or ) inside the regex.
                 let j = i
-                let inRegex = false
+                let inRegex = false  // true once we have consumed the opening "/"
                 while (j < text.length) {
                     const c = text[j]
                     if (inRegex) {
+                        // Inside regex: consume everything until the closing "/"
                         if (c === '/') { j++; inRegex = false; break }
                         j++
                     } else {
+                        // Normal word: stop at whitespace or grouping chars
                         if (/[\s"()\[\]{}]/.test(c)) break
+                        // Detect field:/ transition; consume both chars and enter regex mode
                         if (c === ':' && j + 1 < text.length && text[j + 1] === '/') {
                             inRegex = true
                             j += 2 // consume :/

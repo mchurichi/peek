@@ -97,8 +97,8 @@ test.describe('lucene-query', () => {
       expect(log.message.toLowerCase()).toContain('connection refused');
     }
     // "connection timeout" must NOT appear
-    const wrongLogs = logs.filter((l) => l.message.toLowerCase().includes('timeout') && !l.message.toLowerCase().includes('refused'));
-    expect(wrongLogs).toHaveLength(0);
+    const nonMatchingLogs = logs.filter((l) => l.message.toLowerCase().includes('timeout') && !l.message.toLowerCase().includes('refused'));
+    expect(nonMatchingLogs).toHaveLength(0);
   });
 
   test('required/prohibited: +level:ERROR -service:auth returns only non-auth ERRORs', async ({ page }) => {
