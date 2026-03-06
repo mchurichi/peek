@@ -6,9 +6,9 @@ import (
 
 func TestJSONParser_CanParse(t *testing.T) {
 	tests := []struct {
-		name  string
-		line  string
-		want  bool
+		name string
+		line string
+		want bool
 	}{
 		{
 			name: "valid JSON object",
@@ -57,12 +57,12 @@ func TestJSONParser_Parse(t *testing.T) {
 		wantErr      bool
 	}{
 		{
-			name:        "complete JSON log",
-			line:        `{"timestamp":"2024-01-15T10:30:00Z","level":"ERROR","message":"test error","service":"api"}`,
-			wantLevel:   "ERROR",
-			wantMessage: "test error",
+			name:         "complete JSON log",
+			line:         `{"timestamp":"2024-01-15T10:30:00Z","level":"ERROR","message":"test error","service":"api"}`,
+			wantLevel:    "ERROR",
+			wantMessage:  "test error",
 			wantFieldKey: "service",
-			wantErr:     false,
+			wantErr:      false,
 		},
 		{
 			name:        "JSON with msg field",
@@ -348,5 +348,55 @@ func TestGenerateID(t *testing.T) {
 	}
 	if len(id1) != 16 { // 8 bytes = 16 hex chars
 		t.Errorf("generateID() length = %d, want 16", len(id1))
+	}
+}
+
+func TestParseLogfmtEdgeCases(t *testing.T) {
+	tests := []struct {
+		name      string
+		line      string
+		assertion func(*testing.T, map[string]string)
+	}{
+		{
+			name: "key without value",
+			line: `level=INFO empty=`,
+			assertion: func(t *testing.T, got map[string]string) {
+				t.Helper()
+				if got["empty"] != "" {
+					t.Fatalf("expected empty value, got %q", got["empty"])
+				}
+			},
+		},
+		{
+			name: "ignores token without equals",
+			line: `level=INFO baretoken msg="ok"`,
+			assertion: func(t *testing.T, got map[string]string) {
+				t.Helper()
+				if _, ok := got["baretoken"]; ok {
+					t.Fatalf("unexpected baretoken key")
+				}
+				if got["msg"] != "ok" {
+					t.Fatalf("expected msg key")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseLogfmt(tt.line)
+			tt.assertion(t, got)
+		})
+	}
+}
+
+func TestLogfmtParser_ParsesTimestampField(t *testing.T) {
+	p := NewLogfmtParser()
+	entry, err := p.Parse(`timestamp=2024-01-15T10:30:00Z level=INFO msg="ok"`)
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if entry.Timestamp.IsZero() {
+		t.Fatalf("expected parsed timestamp")
 	}
 }
