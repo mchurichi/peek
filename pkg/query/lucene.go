@@ -36,6 +36,11 @@ func Parse(queryStr string) (*Query, error) {
 		return nil, err
 	}
 
+	parser.skipWhitespace()
+	if parser.pos < len(parser.input) {
+		return nil, fmt.Errorf("unexpected token near %q", parser.input[parser.pos:])
+	}
+
 	return &Query{filters: []Filter{filter}}, nil
 }
 

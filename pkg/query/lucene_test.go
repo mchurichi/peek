@@ -23,6 +23,10 @@ func TestParse(t *testing.T) {
 		{"complex query", "(level:ERROR OR level:WARN) AND service:api", false},
 		{"wildcard field", "message:*timeout*", false},
 		{"quoted string", `message:"connection refused"`, false},
+		{"dangling closing parenthesis", `level:ERROR)`, true},
+		{"extra closing parenthesis after group", `(level:ERROR))`, true},
+		{"implicit AND with trailing keyword", `level:ERROR foo`, false},
+		{"implicit AND after grouped expression", `(level:ERROR) bar`, false},
 	}
 
 	for _, tt := range tests {
