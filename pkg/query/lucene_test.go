@@ -24,8 +24,9 @@ func TestParse(t *testing.T) {
 		{"wildcard field", "message:*timeout*", false},
 		{"quoted string", `message:"connection refused"`, false},
 		{"dangling closing parenthesis", `level:ERROR)`, true},
-		{"trailing token after expression", `level:ERROR foo`, true},
-		{"trailing token after grouped expression", `(level:ERROR) bar`, true},
+		{"extra closing parenthesis after group", `(level:ERROR))`, true},
+		{"implicit AND with trailing keyword", `level:ERROR foo`, false},
+		{"implicit AND after grouped expression", `(level:ERROR) bar`, false},
 	}
 
 	for _, tt := range tests {
