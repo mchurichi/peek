@@ -252,6 +252,37 @@ export async function waitForQuery(page, payload, { timeout = 10_000, interval =
   throw new Error(`Timed out waiting for /query: ${lastError?.message || 'unknown error'}`);
 }
 
+export async function waitForQueryError(page, payload, { timeout = 10_000, interval = 200, status = 400 } = {}) {
+  const deadline = Date.now() + timeout;
+  let lastError = null;
+
+  while (Date.now() < deadline) {
+    try {
+      const url = new URL('/query', page.url()).toString();
+      const resp = await page.request.post(url, { data: payload });
+      const text = await resp.text();
+      if (resp.status() === status) return { status: resp.status(), text };
+      lastError = new Error(`query status ${resp.status()}`);
+    } catch (err) {
+      lastError = err;
+    }
+    await delay(interval);
+  }
+
+  throw new Error(`Timed out waiting for query error: ${lastError?.message || 'unknown error'}`);
+}
+
+export async function waitForStatusText(page, matcher, { timeout = 5_000, interval = 100 } = {}) {
+  const expected = typeof matcher === 'string' ? matcher.toLowerCase() : null;
+  await expect.poll(async () => {
+    const text = await page.evaluate(() =>
+      document.querySelector('.status')?.textContent?.trim() || ''
+    );
+    if (typeof matcher === 'function') return matcher(text) ? text : '';
+    return text.toLowerCase().includes(expected) ? text : '';
+  }, { timeout, intervals: [interval, interval * 2, interval * 3] }).not.toBe('');
+}
+
 /**
  * Map of preset values to their display labels in the time-range dropdown.
  */

@@ -328,6 +328,10 @@ function createRecord(index, rng) {
     record.feature_flag = pick(rng, ["checkout_v2", "search_v3", "billing_v1"]);
   }
 
+  if (!chance(rng, 0.9)) {
+    delete record.request_id;
+  }
+
   record.msg = makeMessage(level, record, rng);
   if (level) record.level = level;
 

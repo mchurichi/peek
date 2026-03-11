@@ -71,6 +71,9 @@ func TestQueryMatchingBehavior(t *testing.T) {
 	}{
 		{name: "boolean query", query: `(level:ERROR AND service:api) OR message:timeout`, want: true},
 		{name: "not and keyword", query: `NOT level:INFO AND message:failure`, want: true},
+		{name: "exists query", query: `service:* AND status >= 500`, want: true},
+		{name: "same-field values", query: `level:(ERROR OR WARN)`, want: true},
+		{name: "legacy range rejected", query: `status:[500 TO 599]`, wantErr: true},
 		{name: "parse error", query: `(level:ERROR`, wantErr: true},
 	}
 
@@ -93,26 +96,27 @@ func TestQueryMatchingBehavior(t *testing.T) {
 	}
 }
 
-func TestParseRangeAndTokenReader(t *testing.T) {
-	entry := &storage.LogEntry{Fields: map[string]interface{}{"status": 503}}
-
-	rf, err := (&parser{}).parseRange("status", "[500 TO 599]")
+func TestReadComparisonValueAndScopedGroup(t *testing.T) {
+	p := &parser{input: `>= 2025-01-01T00:00:00Z`, pos: 0}
+	if op := p.readComparator(); op != ">=" {
+		t.Fatalf("readComparator() = %q, want >=", op)
+	}
+	value, err := p.readComparisonValue()
 	if err != nil {
-		t.Fatalf("parseRange() error = %v", err)
+		t.Fatalf("readComparisonValue() error = %v", err)
 	}
-	if !rf.Match(entry) {
-		t.Fatalf("expected numeric range filter to match")
+	if value != "2025-01-01T00:00:00Z" {
+		t.Fatalf("readComparisonValue() = %q", value)
 	}
 
-	p := &parser{input: `"hello world" [1 TO 2] bare`, pos: 0}
-	tokens := []string{`"hello world"`, `[1 TO 2]`, `bare`}
-	for i, want := range tokens {
-		if i > 0 {
-			p.skipWhitespace()
-		}
-		if got := p.readToken(); got != want {
-			t.Fatalf("token %d = %q, want %q", i, got, want)
-		}
+	p = &parser{input: `(ERROR OR WARN)`, pos: 0}
+	filter, err := p.parseScopedGroup("level")
+	if err != nil {
+		t.Fatalf("parseScopedGroup() error = %v", err)
+	}
+	entry := &storage.LogEntry{Level: "WARN", Message: "warn", Fields: map[string]interface{}{}}
+	if !filter.Match(entry) {
+		t.Fatalf("expected scoped group to match WARN level")
 	}
 }
 
@@ -151,13 +155,10 @@ func TestFilterMatchingEdgeCases(t *testing.T) {
 	}
 }
 
-func TestParseTimestampRangeQuery(t *testing.T) {
-	rf, err := (&parser{}).parseRange("timestamp", "[2025-01-01T00:00:00Z TO 2025-01-02T00:00:00Z]")
-	if err != nil {
-		t.Fatalf("parseRange() error = %v", err)
-	}
+func TestTimestampComparisonFilter(t *testing.T) {
+	filter := &ComparisonFilter{Field: "timestamp", Operator: "<", Value: "2025-01-02T00:00:00Z", parser: &parser{}}
 	entry := &storage.LogEntry{Timestamp: time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)}
-	if !rf.Match(entry) {
-		t.Fatalf("expected timestamp range filter to match entry")
+	if !filter.Match(entry) {
+		t.Fatalf("expected timestamp comparison filter to match entry")
 	}
 }

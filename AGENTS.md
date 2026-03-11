@@ -55,7 +55,7 @@ pkg/parser/detector.go     Auto-detection of log formats (JSON, logfmt)
 pkg/parser/parser.go       JSON and logfmt parsers
 pkg/storage/types.go       LogEntry struct, FieldInfo struct, Filter interface, Stats
 pkg/storage/badger.go      BadgerDB: Store, Query, Scan, GetFields, retention
-pkg/query/lucene.go        Lucene query parser (AND/OR/NOT, field:value, wildcards, ranges)
+pkg/query/kql.go           Peek KQL parser (boolean logic, field:value, wildcards, exists, comparisons)
 pkg/server/server.go       HTTP server, /query, /fields, WebSocket /logs, broadcast
 pkg/server/index.html      Web UI (embedded via //go:embed)
 playwright.config.mjs      Playwright Test runner config (Chromium, retries, artifacts)
@@ -66,7 +66,7 @@ e2e/resize.spec.mjs        Column resize behavior
 e2e/search.spec.mjs        Search syntax highlighting and field autocompletion
 e2e/search-caret.spec.mjs  Search caret/overlay alignment
 e2e/sliding-window.spec.mjs Sliding time presets via client-side window pruning
-e2e/field-filter-append.spec.mjs Field-value click appends safe Lucene token to query
+e2e/field-filter-append.spec.mjs Field-value click appends safe KQL token to query
 e2e/query-history.spec.mjs Query history and starred queries (localStorage, shortcuts, dropdowns)
 e2e/datetime.spec.mjs      Datetime range picker UI and API integration
 e2e/levelless.spec.mjs     Levelless log entries rendering and filtering
@@ -125,7 +125,7 @@ BadgerDB keys: `log:{timestamp_nano}:{id}` — enables time-range key seeking.
 - Grid-based table using CSS Grid with `display: contents` rows, not `<table>`
 - Column pinning: click field keys in expanded detail rows
 - Column resize: drag handles manipulate `gridTemplateColumns`
-- Search bar: transparent `<input>` over a syntax-highlight `<div>` (`.search-highlight`) for Lucene token coloring
+- Search bar: transparent `<input>` over a syntax-highlight `<div>` (`.search-highlight`) for KQL token coloring
 - Autocomplete dropdown (`.search-autocomplete`) populated from `/fields` API; dismiss with Escape, navigate with arrow keys, accept with Tab/Enter
 - Dropdown portal pattern: `openDropdown(triggerEl, buildFn, opts)` appends to `document.body`, positions via `getBoundingClientRect()`, dismisses on outside click/Escape
 - Time presets are dropdown-based buttons (`[data-testid="time-preset"]` with `data-value` attribute), not `<select>` elements

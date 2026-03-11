@@ -40,6 +40,11 @@ type client struct {
 	done chan struct{}
 }
 
+type preparedQuery struct {
+	filter    query.Filter
+	timeRange *storage.TimeRange
+}
+
 // NewServer creates a new HTTP server
 func NewServer(storage *storage.BadgerStorage, startTime *time.Time) *Server {
 	s := &Server{
@@ -110,9 +115,9 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := map[string]interface{}{
-		"status":         "ok",
-		"logs_stored":    stats.TotalLogs,
-		"db_size_bytes":  int64(stats.DBSizeMB * 1024 * 1024),
+		"status":        "ok",
+		"logs_stored":   stats.TotalLogs,
+		"db_size_bytes": int64(stats.DBSizeMB * 1024 * 1024),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -128,9 +133,9 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := map[string]interface{}{
-		"total_logs":  stats.TotalLogs,
-		"db_size_mb":  stats.DBSizeMB,
-		"levels":      stats.Levels,
+		"total_logs": stats.TotalLogs,
+		"db_size_mb": stats.DBSizeMB,
+		"levels":     stats.Levels,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -162,58 +167,21 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 		req.Limit = 100
 	}
 
-	// Parse query
-	queryStr := req.Query
-	if queryStr == "" {
-		queryStr = "*"
-	}
-
-	q, err := query.Parse(queryStr)
+	pq, err := s.prepareQuery(req.Query, req.Start, req.End)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid query: %v", err), http.StatusBadRequest)
 		return
 	}
 
-	// Apply default filter (e.g., for fresh mode)
-	var filter query.Filter = q
-	if s.defaultFilter != nil {
-		filter = &query.AndFilter{
-			Left:  s.defaultFilter,
-			Right: q,
-		}
-	}
-
-	// Parse optional time range parameters.
-	var tr *storage.TimeRange
-	var rangeStart, rangeEnd time.Time
-	if req.Start != "" {
-		if t, err := time.Parse(time.RFC3339, req.Start); err == nil {
-			rangeStart = t
-		}
-	}
-	if req.End != "" {
-		if t, err := time.Parse(time.RFC3339, req.End); err == nil {
-			rangeEnd = t
-		}
-	}
-	if !rangeStart.IsZero() || !rangeEnd.IsZero() {
-		tr = &storage.TimeRange{Start: rangeStart, End: rangeEnd}
-		// Also apply the time range as a filter so boundary conditions are correct.
-		filter = &query.AndFilter{
-			Left:  filter,
-			Right: &query.TimestampRangeFilter{Start: rangeStart, End: rangeEnd},
-		}
-	}
-
 	// Execute query
 	executionStart := time.Now()
-	entries, total, err := s.storage.QueryWithTimeRange(filter, tr, req.Limit, req.Offset)
+	entries, total, err := s.storage.QueryWithTimeRange(pq.filter, pq.timeRange, req.Limit, req.Offset)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	took := time.Since(executionStart)
-	
+
 	// Ensure entries is never nil for JSON encoding
 	if entries == nil {
 		entries = []*storage.LogEntry{}
@@ -308,61 +276,71 @@ func (s *Server) readPump(c *client) {
 		}
 
 		if msg.Action == "subscribe" {
+			pq, err := s.prepareQuery(msg.Query, msg.Start, msg.End)
+			if err != nil {
+				c.filter = nil
+				c.timeRange = nil
+				select {
+				case c.send <- map[string]interface{}{"type": "error", "message": fmt.Sprintf("Invalid query: %v", err)}:
+				case <-c.done:
+				}
+				continue
+			}
+
 			queryStr := msg.Query
 			if queryStr == "" {
 				queryStr = "*"
 			}
-
 			c.query = queryStr
-
-			// Parse query
-			q, err := query.Parse(queryStr)
-			if err != nil {
-				log.Printf("Invalid query: %v", err)
-				continue
-			}
-
-			// Apply default filter (e.g., for fresh mode)
-			var filter query.Filter = q
-			if s.defaultFilter != nil {
-				filter = &query.AndFilter{
-					Left:  s.defaultFilter,
-					Right: q,
-				}
-			}
-
-			// Parse optional time range.
-			var tr *storage.TimeRange
-			var rangeStart, rangeEnd time.Time
-			if msg.Start != "" {
-				if t, err := time.Parse(time.RFC3339, msg.Start); err == nil {
-					rangeStart = t
-				}
-			}
-			if msg.End != "" {
-				if t, err := time.Parse(time.RFC3339, msg.End); err == nil {
-					rangeEnd = t
-				}
-			}
-			if !rangeStart.IsZero() || !rangeEnd.IsZero() {
-				tr = &storage.TimeRange{Start: rangeStart, End: rangeEnd}
-				filter = &query.AndFilter{
-					Left:  filter,
-					Right: &query.TimestampRangeFilter{Start: rangeStart, End: rangeEnd},
-				}
-			}
-
-			c.filter = filter
-			c.timeRange = tr
+			c.filter = pq.filter
+			c.timeRange = pq.timeRange
 
 			// Send initial results
-			go s.sendInitialResults(c, filter)
+			go s.sendInitialResults(c, pq.filter)
 
 		} else if msg.Action == "unsubscribe" {
 			c.filter = nil
 			c.timeRange = nil
 		}
 	}
+}
+
+func (s *Server) prepareQuery(queryStr, startStr, endStr string) (*preparedQuery, error) {
+	if queryStr == "" {
+		queryStr = "*"
+	}
+
+	q, err := query.Parse(queryStr)
+	if err != nil {
+		return nil, err
+	}
+
+	filter := query.Filter(q)
+	if s.defaultFilter != nil {
+		filter = &query.AndFilter{Left: s.defaultFilter, Right: q}
+	}
+
+	var tr *storage.TimeRange
+	var rangeStart, rangeEnd time.Time
+	if startStr != "" {
+		if t, err := time.Parse(time.RFC3339, startStr); err == nil {
+			rangeStart = t
+		}
+	}
+	if endStr != "" {
+		if t, err := time.Parse(time.RFC3339, endStr); err == nil {
+			rangeEnd = t
+		}
+	}
+	if !rangeStart.IsZero() || !rangeEnd.IsZero() {
+		tr = &storage.TimeRange{Start: rangeStart, End: rangeEnd}
+		filter = &query.AndFilter{
+			Left:  filter,
+			Right: &query.TimestampRangeFilter{Start: rangeStart, End: rangeEnd},
+		}
+	}
+
+	return &preparedQuery{filter: filter, timeRange: tr}, nil
 }
 
 // writePump sends messages to the WebSocket — only goroutine allowed to write.

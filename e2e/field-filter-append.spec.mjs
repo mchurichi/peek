@@ -80,22 +80,22 @@ test.describe('field-filter-append', () => {
     await setQuery('level:INFO');
     await expandAndWait();
     expect(await clickFieldVal('api')).toBeTruthy();
-    await expectQueryValue('level:INFO AND service:"api"');
+    await expectQueryValue('level:INFO and service:api');
 
     await setQuery('');
     await expandAndWait();
     expect(await clickFieldVal('api')).toBeTruthy();
-    await expectQueryValue('service:"api"');
+    await expectQueryValue('service:api');
 
     await setQuery('*');
     await expandAndWait();
     expect(await clickFieldVal('api')).toBeTruthy();
-    await expectQueryValue('service:"api"');
+    await expectQueryValue('service:api');
 
-    await setQuery('level:INFO AND');
+    await setQuery('level:INFO and');
     await expandAndWait();
     expect(await clickFieldVal('api')).toBeTruthy();
-    await expectQueryValue('level:INFO AND service:"api"');
+    await expectQueryValue('level:INFO and service:api');
 
     await setScroll(page, 300);
     await delay(200);

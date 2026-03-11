@@ -61,10 +61,10 @@ Statistics endpoint
 ```
 
 ### POST /query
-Execute a query
+Execute a Peek KQL query
 ```json
 {
-  "query": "level:ERROR AND service:api",
+  "query": "level:ERROR and service:api",
   "limit": 100,
   "offset": 0
 }
@@ -78,6 +78,13 @@ Response:
   "took_ms": 45
 }
 ```
+
+Supported query examples include:
+
+- `level:(ERROR or WARN)`
+- `message:"connection refused"`
+- `request_id:*`
+- `status >= 500 and duration_ms < 2000`
 
 ### WS /logs
 WebSocket endpoint for real-time log streaming

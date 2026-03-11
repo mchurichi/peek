@@ -38,3 +38,7 @@ Thumbs.db
 # Test files
 test-results/
 playwright-report/
+
+# Logs and environment files
+*.log
+.env*

@@ -25,6 +25,93 @@ test.describe('query-history', () => {
     await stopServer(server);
   });
 
+  test('stars and de-stars the active query persistently', async ({ page }) => {
+    await page.addInitScript(() => {
+      const resetKey = '__peek_e2e_star_reset_v1__';
+      if (sessionStorage.getItem(resetKey)) return;
+      localStorage.removeItem('peek.queryHistory.v1');
+      localStorage.removeItem('peek.starredQueries.v1');
+      sessionStorage.setItem(resetKey, '1');
+    });
+    await page.goto(baseURL);
+
+    const searchInput = page.locator('.search-editor-input');
+    const starBtn = page.locator('[data-testid="star-btn"]');
+    const readStarred = () => readJSONLocalStorage(page, 'peek.starredQueries.v1', []);
+
+    await expect(searchInput).toBeVisible();
+    await expect(starBtn).toBeVisible();
+
+    await searchInput.fill('level:ERROR and service:api');
+    await starBtn.click();
+
+    await expect.poll(async () => {
+      const starred = await readStarred();
+      return starred.includes('level:ERROR and service:api');
+    }).toBe(true);
+
+    await expect(starBtn).toHaveClass(/starred/);
+
+    await page.reload();
+    await expect(searchInput).toBeVisible();
+    await expect.poll(async () => {
+      const starred = await readStarred();
+      return starred.includes('level:ERROR and service:api');
+    }).toBe(true);
+
+    await searchInput.fill('level:ERROR and service:api');
+
+    await starBtn.click();
+    await expect.poll(async () => {
+      const starred = await readStarred();
+      return starred.includes('level:ERROR and service:api');
+    }).toBe(false);
+    await expect(starBtn).not.toHaveClass(/starred/);
+
+    await starBtn.click();
+    await expect.poll(async () => {
+      const starred = await readStarred();
+      return starred.includes('level:ERROR and service:api');
+    }).toBe(true);
+
+    await searchInput.focus();
+    await page.keyboard.press('Alt+s');
+    await expect.poll(async () => {
+      const starred = await readStarred();
+      return starred.includes('level:ERROR and service:api');
+    }).toBe(false);
+    await expect(starBtn).not.toHaveClass(/starred/);
+
+    await searchInput.fill('');
+    await searchInput.type('ser');
+    await expect(page.locator('.search-autocomplete-item').first()).toBeVisible();
+    await searchInput.press('Tab');
+    await expect(searchInput).toHaveValue('service:');
+
+    await searchInput.type('api');
+    await starBtn.click();
+    await expect.poll(async () => {
+      const starred = await readStarred();
+      return starred.includes('service:api');
+    }).toBe(true);
+    await expect(starBtn).toHaveClass(/starred/);
+
+    await page.reload();
+    await expect(searchInput).toBeVisible();
+    await expect.poll(async () => {
+      const starred = await readStarred();
+      return starred.includes('service:api');
+    }).toBe(true);
+
+    await searchInput.fill('service:api');
+    await starBtn.click();
+    await expect.poll(async () => {
+      const starred = await readStarred();
+      return starred.includes('service:api');
+    }).toBe(false);
+    await expect(starBtn).not.toHaveClass(/starred/);
+  });
+
   test('persists history/starred queries and keeps shortcuts/autocomplete working', async ({ page }) => {
     await page.addInitScript(() => {
       const resetKey = '__peek_e2e_history_reset_v1__';
@@ -152,5 +239,31 @@ test.describe('query-history', () => {
     await expect(page.locator('.search-autocomplete-item').first()).toBeVisible();
     await searchInput.press('Escape');
     await expect(page.locator('.search-autocomplete-item').first()).toBeHidden();
+
+    // Legacy history/starred entries stay visible with migration guidance.
+    await page.evaluate(() => {
+      localStorage.setItem('peek.queryHistory.v1', JSON.stringify([
+        {
+          query: 'status:[500 TO 599]',
+          lastUsedAt: '2026-01-01T00:00:00Z',
+          useCount: 1,
+          migrationStatus: 'needs-attention',
+          migrationNote: 'Use comparison operators such as >= and <= instead of legacy ranges.',
+        },
+      ]));
+      localStorage.setItem('peek.starredQueries.v1', JSON.stringify(['status:[500 TO 599]']));
+    });
+
+    await page.reload();
+    await expect(searchInput).toBeVisible();
+
+    await histBtn.click();
+    await page.waitForSelector('.dropdown-portal', { timeout: 3_000 });
+    await expect(page.locator('.dropdown-portal')).toContainText('status:[500 TO 599]');
+    await expect(page.locator('.dropdown-portal')).toContainText('Use comparison operators such as >= and <= instead of legacy ranges.');
+
+    await page.locator('.dropdown-portal .dp-item').first().click();
+    await expect(searchInput).toHaveValue('status:[500 TO 599]');
+    await expect.poll(async () => page.locator('.status').textContent()).toContain('Invalid query');
   });
 });

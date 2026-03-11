@@ -37,7 +37,7 @@ Expected outcomes:
 
 ## 3. Validate migration guidance
 
-Try a legacy query form that is no longer supported, such as a Lucene bracket
+Try a legacy query form that is no longer supported, such as a legacy bracket
 range.
 
 Expected outcomes:
@@ -67,3 +67,15 @@ mise exec -- npx playwright test e2e/sliding-window.spec.mjs
 - `docs/README.md` reflects any changed query examples or migration notes.
 - `AGENTS.md` no longer describes the search bar as Lucene-based.
 - Screenshot generation inputs and captions no longer reference Lucene.
+
+## 6. Validated command set
+
+The following commands were used to validate the completed migration on
+2026-03-11:
+
+```bash
+mise exec -- go test ./...
+mise exec -- go vet ./...
+mise exec -- npm run test:e2e
+mise exec -- node e2e/screenshot.mjs
+```

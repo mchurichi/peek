@@ -1,10 +1,10 @@
 /**
- * search.spec.mjs — Lucene syntax highlighting and field autocompletion.
+ * search.spec.mjs — KQL syntax highlighting and field autocompletion.
  */
 
 import { test, expect } from '@playwright/test';
 import { setTimeout as delay } from 'timers/promises';
-import { portForTestFile, startServer, stopServer, waitForFields } from './helpers.mjs';
+import { portForTestFile, startServer, stopServer, waitForFields, waitForQuery, waitForQueryError, waitForStatusText } from './helpers.mjs';
 
 let server;
 let baseURL;
@@ -42,7 +42,11 @@ test.describe('search', () => {
     await delay(100);
     expect(await page.evaluate(() => !!document.querySelector('.search-highlight .hl-field'))).toBeTruthy();
 
-    await searchInput.fill('level:ERROR AND service:api');
+    await searchInput.fill('level:ERROR and service:api');
+    await delay(100);
+    expect(await page.evaluate(() => !!document.querySelector('.search-highlight .hl-op'))).toBeTruthy();
+
+    await searchInput.fill('status >= 500');
     await delay(100);
     expect(await page.evaluate(() => !!document.querySelector('.search-highlight .hl-op'))).toBeTruthy();
 
@@ -54,9 +58,13 @@ test.describe('search', () => {
     await delay(100);
     expect(await page.evaluate(() => !!document.querySelector('.search-highlight .hl-wildcard'))).toBeTruthy();
 
+    await searchInput.fill('request_id:*');
+    await delay(100);
+    expect(await page.evaluate(() => !!document.querySelector('.search-highlight .hl-wildcard'))).toBeTruthy();
+
     await searchInput.fill('[now-1h TO now]');
     await delay(100);
-    expect(await page.evaluate(() => !!document.querySelector('.search-highlight .hl-range'))).toBeTruthy();
+    expect(await page.evaluate(() => !!document.querySelector('.search-highlight .hl-error'))).toBeTruthy();
 
     await searchInput.fill('(level:ERROR');
     await delay(100);
@@ -152,6 +160,23 @@ test.describe('search', () => {
     await delay(150);
     expect(await searchInput.inputValue()).toBe('level:INFO');
 
+    await searchInput.fill('status ');
+    await delay(300);
+    const hasComparator = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('.search-autocomplete-item'))
+        .some((el) => el.textContent.includes('status >='))
+    );
+    expect(hasComparator).toBeTruthy();
+
+    await searchInput.fill('and ');
+    await delay(300);
+    const invalidAndComparators = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('.search-autocomplete-item'))
+        .map((el) => el.textContent.trim())
+        .filter((text) => text === 'and:' || text.startsWith('and >') || text.startsWith('and <'))
+    );
+    expect(invalidAndComparators).toEqual([]);
+
     await searchInput.fill('');
     await searchInput.type('service:');
     await delay(300);
@@ -185,14 +210,17 @@ test.describe('search', () => {
     const freshField = await page.evaluate(() => !!document.querySelector('.search-highlight .hl-field'));
     expect(freshField).toBeTruthy();
 
-    await searchInput.fill('level:ERROR AND');
+    const errorResp = await waitForQueryError(page, { query: 'level:[bad', limit: 100, offset: 0 });
+    expect(errorResp.text).toContain('Invalid query');
+
+    await searchInput.fill('level:[bad');
     await searchInput.press('Enter');
-    await delay(500);
+    await waitForStatusText(page, (text) => text.toLowerCase().includes('invalid query'));
 
     const statusText = await page.evaluate(() =>
       document.querySelector('.status')?.textContent?.trim() || ''
     );
-    expect(statusText.toLowerCase()).toContain('query');
+    expect(statusText.toLowerCase()).toContain('invalid query');
 
     const clearedRows = await page.evaluate(() => document.querySelectorAll('.log-row').length);
     expect(clearedRows).toBe(0);
@@ -201,5 +229,9 @@ test.describe('search', () => {
       document.querySelector('.log-table-body > div')?.textContent?.trim() || ''
     );
     expect(emptyMessage).toContain(statusText);
+
+    const groupedResp = await waitForQuery(page, { query: 'level:(INFO or ERROR)', limit: 100, offset: 0 });
+    expect(groupedResp.status).toBe(200);
+    expect(groupedResp.body.total).toBeGreaterThan(0);
   });
 });

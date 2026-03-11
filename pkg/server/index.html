@@ -1234,13 +1234,65 @@
             }, 300)
         }
 
-        const queryHistory   = van.state(loadStorage(HISTORY_KEY) || [])
-        const starredQueries = van.state(loadStorage(STARRED_KEY) || [])
+        function quoteQueryValue(value) {
+            const raw = String(value ?? '')
+            const escaped = raw.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+            return /[\s():<>]/.test(raw) ? `"${escaped}"` : escaped
+        }
+
+        function normalizeHistoryEntries(raw) {
+            if (!Array.isArray(raw)) return []
+            return raw
+                .filter(item => item && typeof item.query === 'string')
+                .map(item => ({
+                    query: item.query,
+                    lastUsedAt: typeof item.lastUsedAt === 'string' ? item.lastUsedAt : new Date(0).toISOString(),
+                    useCount: typeof item.useCount === 'number' ? item.useCount : 1,
+                    migrationStatus: typeof item.migrationStatus === 'string' ? item.migrationStatus : 'native',
+                    migrationNote: typeof item.migrationNote === 'string' ? item.migrationNote : '',
+                }))
+        }
+
+        function normalizeStarredQueries(raw) {
+            if (!Array.isArray(raw)) return []
+            return raw
+                .map(item => typeof item === 'string' ? { query: item, migrationStatus: 'native', migrationNote: '' } : item)
+                .filter(item => item && typeof item.query === 'string')
+                .map(item => ({
+                    query: item.query,
+                    migrationStatus: typeof item.migrationStatus === 'string' ? item.migrationStatus : 'native',
+                    migrationNote: typeof item.migrationNote === 'string' ? item.migrationNote : '',
+                }))
+        }
+
+        function markLegacyStatus(queryText) {
+            if (/\[[^\]]*\bTO\b[^\]]*\]/i.test(queryText)) {
+                return {
+                    migrationStatus: 'needs-attention',
+                    migrationNote: 'Use comparison operators such as >= and <= instead of legacy ranges.',
+                }
+            }
+            return { migrationStatus: 'native', migrationNote: '' }
+        }
+
+        function statusSubline(status) {
+            const lowered = status.toLowerCase()
+            if (lowered.includes('legacy ranges') || lowered.includes('comparison operators')) {
+                return 'Use comparison operators such as >= and <=, then try again'
+            }
+            if (lowered.includes('invalid query')) {
+                return 'Fix the query and try again'
+            }
+            return 'Try a different query'
+        }
+
+        const queryHistory   = van.state(normalizeHistoryEntries(loadStorage(HISTORY_KEY) || []))
+        const starredQueries = van.state(normalizeStarredQueries(loadStorage(STARRED_KEY) || []))
         const historyNavIdx  = van.state(-1)  // -1 = live input, ≥0 = index into queryHistory
         const liveQuery      = van.state("")  // current input value, updated on every keystroke
 
         const currentIsStarred = van.derive(() =>
-            starredQueries.val.includes(liveQuery.val.trim())
+            starredQueries.val.some(item => item.query === liveQuery.val.trim())
         )
 
         function saveHistoryEntry(q) {
@@ -1248,15 +1300,16 @@
             if (!trimmed || trimmed === '*') return
             const now = new Date().toISOString()
             const existing = queryHistory.val.find(e => e.query === trimmed)
+            const migration = markLegacyStatus(trimmed)
             let next
             if (existing) {
                 next = [
-                    { query: trimmed, lastUsedAt: now, useCount: existing.useCount + 1 },
+                    { query: trimmed, lastUsedAt: now, useCount: existing.useCount + 1, migrationStatus: migration.migrationStatus, migrationNote: migration.migrationNote },
                     ...queryHistory.val.filter(e => e.query !== trimmed),
                 ]
             } else {
                 next = [
-                    { query: trimmed, lastUsedAt: now, useCount: 1 },
+                    { query: trimmed, lastUsedAt: now, useCount: 1, migrationStatus: migration.migrationStatus, migrationNote: migration.migrationNote },
                     ...queryHistory.val,
                 ]
             }
@@ -1268,16 +1321,17 @@
         function toggleStarred(q) {
             const trimmed = (q || '').trim()
             if (!trimmed || trimmed === '*') return
-            const already = starredQueries.val.includes(trimmed)
+            const already = starredQueries.val.some(item => item.query === trimmed)
+            const migration = markLegacyStatus(trimmed)
             let next
             if (already) {
-                next = starredQueries.val.filter(s => s !== trimmed)
+                next = starredQueries.val.filter(s => s.query !== trimmed)
             } else {
-                next = [trimmed, ...starredQueries.val]
+                next = [{ query: trimmed, migrationStatus: migration.migrationStatus, migrationNote: migration.migrationNote }, ...starredQueries.val]
                 if (next.length > STARRED_MAX) next = next.slice(0, STARRED_MAX)
             }
             starredQueries.val = next
-            saveStorage(STARRED_KEY, next)
+            saveStorage(STARRED_KEY, next.map(item => item.query))
         }
 
         // ──────────────────────────────────────────
@@ -1447,6 +1501,11 @@
                     logs.val = data.logs || []
                     totalCount.val = data.total
                     pruneLogsForSlidingWindow()
+                } else if (data.type === "error") {
+                    statusText.val = data.message || "Invalid query"
+                    emptyMessage.val = statusText.val
+                    logs.val = []
+                    totalCount.val = 0
                 }
             }
             ws.onerror = () => { wsStatus.val = "error" }
@@ -1539,16 +1598,15 @@
         }
 
         function filterByField(field, value) {
-            const escaped = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-            const token = `${field}:"${escaped}"`
+            const token = `${field}:${quoteQueryValue(value)}`
             if (queryInputEl) {
                 const cur = queryInputEl.value.trim()
                 if (!cur || cur === '*') {
                     queryInputEl.value = token
-                } else if (/(?:AND|OR|NOT|\()$/.test(cur)) {
+                } else if (/(?:and|or|not|\()$/i.test(cur)) {
                     queryInputEl.value = cur + ' ' + token
                 } else {
-                    queryInputEl.value = cur + ' AND ' + token
+                    queryInputEl.value = cur + ' and ' + token
                 }
                 liveQuery.val = queryInputEl.value
                 updateHighlightGlobal()
@@ -1765,7 +1823,7 @@
         }
 
         // ──────────────────────────────────────────
-        // Lucene syntax tokenizer & highlighter
+        // KQL syntax tokenizer & highlighter
         // ──────────────────────────────────────────
 
         // Sub-tokenize a value string for wildcard (*) spans
@@ -1785,6 +1843,17 @@
                 i = j
             }
             return parts
+        }
+
+        const RESERVED_QUERY_WORDS = new Set(['and', 'or', 'not'])
+
+        function pushComparisonParts(tokens, word) {
+            const match = word.match(/^([A-Za-z0-9_.-]+)(>=|<=|>|<)(.+)$/)
+            if (!match) return false
+            tokens.push({type: 'field', text: match[1]})
+            tokens.push({type: 'range', text: match[2]})
+            for (const t of tokenizeValue(match[3])) tokens.push(t)
+            return true
         }
 
         function tokenize(text) {
@@ -1821,18 +1890,27 @@
                     continue
                 }
 
-                // Range: [ ... ] or { ... }
+                // Legacy bracket ranges are errors in KQL
                 if (ch === '[' || ch === '{') {
                     let j = i + 1
                     const closing = ch === '[' ? ']' : '}'
                     while (j < text.length && text[j] !== closing) j++
                     if (j < text.length) {
-                        tokens.push({type: 'range', text: text.slice(i, j + 1)})
+                        tokens.push({type: 'error', text: text.slice(i, j + 1)})
                         i = j + 1
                     } else {
                         tokens.push({type: 'error', text: text.slice(i)})
                         i = text.length
                     }
+                    continue
+                }
+
+                // Comparators
+                if (ch === '>' || ch === '<') {
+                    let j = i + 1
+                    if (j < text.length && text[j] === '=') j++
+                    tokens.push({type: 'op', text: text.slice(i, j)})
+                    i = j
                     continue
                 }
 
@@ -1858,12 +1936,13 @@
 
                 // Word token (field:value, operator, or bare value)
                 let j = i
-                while (j < text.length && !/[\s"()\[\]{}]/.test(text[j])) j++
+                while (j < text.length && !/[\s"()\[\]{}><]/.test(text[j])) j++
                 const word = text.slice(i, j)
                 i = j
                 if (!word) { i++; continue }
 
-                if (word === 'AND' || word === 'OR' || word === 'NOT') {
+                const wordUpper = word.toUpperCase()
+                if (wordUpper === 'AND' || wordUpper === 'OR' || wordUpper === 'NOT') {
                     tokens.push({type: 'op', text: word})
                 } else {
                     const colonIdx = word.indexOf(':')
@@ -1874,6 +1953,8 @@
                         if (val) {
                             for (const t of tokenizeValue(val)) tokens.push(t)
                         }
+                    } else if (pushComparisonParts(tokens, word)) {
+                        // handled by helper
                     } else {
                         for (const t of tokenizeValue(word)) tokens.push(t)
                     }
@@ -1926,8 +2007,28 @@
         function getCurrentToken(inputEl) {
             const pos = inputEl.selectionStart
             const text = inputEl.value.slice(0, pos)
+            const comparisonMatch = text.match(/(?:^|[\s(])([A-Za-z0-9_.-]+)\s*(>=|<=|>|<)\s*([^\s()]*)$/)
+            if (comparisonMatch && !RESERVED_QUERY_WORDS.has(comparisonMatch[1].toLowerCase())) {
+                const partial = comparisonMatch[3] || ''
+                return {
+                    type: 'comparisonValue',
+                    field: comparisonMatch[1],
+                    operator: comparisonMatch[2],
+                    partial,
+                    start: pos - partial.length,
+                }
+            }
+            const postFieldMatch = text.match(/(?:^|[\s(])([A-Za-z0-9_.-]+)\s+$/)
+            if (postFieldMatch && !RESERVED_QUERY_WORDS.has(postFieldMatch[1].toLowerCase())) {
+                return {
+                    type: 'postField',
+                    field: postFieldMatch[1],
+                    partial: '',
+                    start: pos,
+                }
+            }
             let i = text.length - 1
-            while (i >= 0 && !/[\s"()\[\]{}]/.test(text[i])) i--
+            while (i >= 0 && !/[\s"()\[\]{}><]/.test(text[i])) i--
             const word = text.slice(i + 1)
             const start = i + 1
             const colonIdx = word.indexOf(':')
@@ -1941,18 +2042,43 @@
             const partial = ctx.partial.toLowerCase()
             if (ctx.type === 'value') {
                 const fi = fields.find(f => f.name.toLowerCase() === ctx.field.toLowerCase())
+                const existsSuggestion = (!partial || '*'.startsWith(partial))
+                    ? [{text: '*', insert: ctx.field + ':*', replaceFrom: ctx.start}]
+                    : []
+                if (!fi || !fi.top_values.length) return existsSuggestion
+                return [...fi.top_values
+                    .filter(v => String(v).toLowerCase().startsWith(partial))
+                    .map(v => ({text: String(v), insert: ctx.field + ':' + quoteQueryValue(v), replaceFrom: ctx.start})), ...existsSuggestion]
+            }
+            if (ctx.type === 'comparisonValue') {
+                const fi = fields.find(f => f.name.toLowerCase() === ctx.field.toLowerCase())
                 if (!fi || !fi.top_values.length) return []
                 return fi.top_values
                     .filter(v => String(v).toLowerCase().startsWith(partial))
-                    .map(v => ({text: String(v), insert: ctx.field + ':' + String(v), replaceFrom: ctx.start}))
+                    .map(v => ({text: String(v), insert: String(v), replaceFrom: ctx.start}))
+            }
+            if (ctx.type === 'postField') {
+                return [
+                    {text: `${ctx.field}:`, insert: ':', replaceFrom: ctx.start},
+                    {text: `${ctx.field} >=`, insert: '>= ', replaceFrom: ctx.start},
+                    {text: `${ctx.field} <=`, insert: '<= ', replaceFrom: ctx.start},
+                    {text: `${ctx.field} >`, insert: '> ', replaceFrom: ctx.start},
+                    {text: `${ctx.field} <`, insert: '< ', replaceFrom: ctx.start},
+                ]
             }
             const fieldSugs = fields
                 .filter(f => f.name.toLowerCase().startsWith(partial))
                 .map(f => ({text: f.name + ':', insert: f.name + ':', replaceFrom: ctx.start}))
-            const opSugs = ['AND', 'OR', 'NOT']
+            const comparisonSugs = fields
+                .filter(f => f.name.toLowerCase().startsWith(partial))
+                .flatMap(f => ([
+                    {text: `${f.name} >=`, insert: `${f.name} >= `, replaceFrom: ctx.start},
+                    {text: `${f.name} <=`, insert: `${f.name} <= `, replaceFrom: ctx.start},
+                ]))
+            const opSugs = ['and', 'or', 'not']
                 .filter(op => op.toLowerCase().startsWith(partial))
                 .map(op => ({text: op, insert: op + ' ', replaceFrom: ctx.start}))
-            return [...fieldSugs, ...opSugs]
+            return [...fieldSugs, ...comparisonSugs, ...opSugs]
         }
 
         // ──────────────────────────────────────────
@@ -2083,7 +2209,7 @@
             const inp = input({
                 type: "text",
                 class: "search-editor-input",
-                placeholder: "level:ERROR AND service:api AND message:*timeout*",
+                placeholder: "level:ERROR and service:api and message:*timeout*",
                 autocomplete: "off",
                 spellcheck: "false",
                 oninput: () => { updateHighlight(); updateCompletions(); liveQuery.val = inp.value },
@@ -2249,6 +2375,12 @@
                                     row.title = item.query
                                     row.addEventListener('click', () => loadQuery(item.query))
                                     panel.appendChild(row)
+                                    if (item.migrationStatus === 'needs-attention' && item.migrationNote) {
+                                        const note = document.createElement('div')
+                                        note.className = 'dp-empty'
+                                        note.textContent = item.migrationNote
+                                        panel.appendChild(note)
+                                    }
                                 }
                             }
                         }
@@ -2262,7 +2394,7 @@
                                 empty.textContent = 'No starred queries'
                                 panel.appendChild(empty)
                             } else {
-                                for (const q of starred) {
+                                for (const item of starred) {
                                     const row = document.createElement('button')
                                     row.className = 'dp-item starred-item'
                                     const starIcon = document.createElement('span')
@@ -2272,10 +2404,16 @@
                                     starIcon.style.flexShrink = '0'
                                     starIcon.style.color = 'var(--peek-amber)'
                                     row.appendChild(starIcon)
-                                    row.appendChild(document.createTextNode(q))
-                                    row.title = q
-                                    row.addEventListener('click', () => loadQuery(q))
+                                    row.appendChild(document.createTextNode(item.query))
+                                    row.title = item.query
+                                    row.addEventListener('click', () => loadQuery(item.query))
                                     panel.appendChild(row)
+                                    if (item.migrationStatus === 'needs-attention' && item.migrationNote) {
+                                        const note = document.createElement('div')
+                                        note.className = 'dp-empty'
+                                        note.textContent = item.migrationNote
+                                        panel.appendChild(note)
+                                    }
                                 }
                             }
                         }
@@ -2707,7 +2845,7 @@
                     const empty = bodyEl.querySelector(".empty-state")
                     if (empty) {
                         const headline = statusVal.length > 0 ? statusVal : "No logs found"
-                        const subline  = statusVal.length > 0 ? "Fix the query and try again" : "Try a different query"
+                        const subline  = statusVal.length > 0 ? statusSubline(statusVal) : "Try a different query"
                         empty.innerHTML = `<strong style="color:#888;">${headline}</strong><br>${subline}`
                     }
                     lastStatusVal = statusVal
@@ -2746,7 +2884,7 @@
                         emptyDiv.className = "empty-state"
                         emptyDiv.style.cssText = "grid-column: 1 / -1; text-align:center; padding:3rem; color:#666;"
                         const headline = showStatus ? status : "No logs found"
-                        const subline  = showStatus ? "Fix the query and try again" : "Try a different query"
+                        const subline  = showStatus ? statusSubline(status) : "Try a different query"
                         emptyDiv.innerHTML = `<strong style="color:#888;">${headline}</strong><br>${subline}`
                         bodyEl.appendChild(emptyDiv)
                         return
@@ -2826,7 +2964,7 @@
 
         // Status bar (error messages)
         function StatusBar() {
-            return div({class: () => statusText.val.startsWith("Error") ? "status error" : "status"},
+            return div({class: () => /(^error|invalid query)/i.test(statusText.val) ? "status error" : "status"},
                 () => statusText.val
             )
         }

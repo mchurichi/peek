@@ -17,12 +17,18 @@ func TestParse(t *testing.T) {
 		{"wildcard query", "*", false},
 		{"simple field query", "level:ERROR", false},
 		{"keyword query", "timeout", false},
+		{"quoted phrase query", `"connection refused"`, false},
 		{"AND query", "level:ERROR AND service:api", false},
+		{"lowercase and query", "level:ERROR and service:api", false},
 		{"OR query", "level:ERROR OR level:WARN", false},
 		{"NOT query", "NOT level:DEBUG", false},
+		{"comparison query", "status >= 500", false},
+		{"exists query", "request_id:*", false},
+		{"same field multi-value query", "level:(ERROR OR WARN)", false},
 		{"complex query", "(level:ERROR OR level:WARN) AND service:api", false},
 		{"wildcard field", "message:*timeout*", false},
 		{"quoted string", `message:"connection refused"`, false},
+		{"legacy range rejected", `status:[500 TO 599]`, true},
 		{"dangling closing parenthesis", `level:ERROR)`, true},
 		{"extra closing parenthesis after group", `(level:ERROR))`, true},
 		{"implicit AND with trailing keyword", `level:ERROR foo`, false},
@@ -147,6 +153,58 @@ func TestKeywordFilter(t *testing.T) {
 			filter := &KeywordFilter{Keyword: tt.keyword}
 			if got := filter.Match(tt.entry); got != tt.want {
 				t.Errorf("KeywordFilter.Match() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExistsFilter(t *testing.T) {
+	entry := &storage.LogEntry{Level: "ERROR", Message: "boom", Fields: map[string]interface{}{"service": "api"}}
+
+	tests := []struct {
+		name   string
+		filter *ExistsFilter
+		want   bool
+	}{
+		{name: "matches present custom field", filter: &ExistsFilter{Field: "service"}, want: true},
+		{name: "matches present special field", filter: &ExistsFilter{Field: "level"}, want: true},
+		{name: "missing field", filter: &ExistsFilter{Field: "request_id"}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.filter.Match(entry); got != tt.want {
+				t.Errorf("ExistsFilter.Match() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestComparisonFilter(t *testing.T) {
+	p := &parser{}
+	entry := &storage.LogEntry{
+		Timestamp: time.Date(2025, 1, 1, 10, 0, 0, 0, time.UTC),
+		Fields: map[string]interface{}{
+			"status":      503,
+			"duration_ms": "850",
+		},
+	}
+
+	tests := []struct {
+		name   string
+		filter *ComparisonFilter
+		want   bool
+	}{
+		{name: "numeric greater or equal", filter: &ComparisonFilter{Field: "status", Operator: ">=", Value: "500", parser: p}, want: true},
+		{name: "numeric strict less", filter: &ComparisonFilter{Field: "status", Operator: "<", Value: "500", parser: p}, want: false},
+		{name: "string numeric field", filter: &ComparisonFilter{Field: "duration_ms", Operator: ">", Value: "500", parser: p}, want: true},
+		{name: "timestamp comparison", filter: &ComparisonFilter{Field: "timestamp", Operator: ">=", Value: "2025-01-01T09:00:00Z", parser: p}, want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.filter.Match(entry); got != tt.want {
+				t.Errorf("ComparisonFilter.Match() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -506,6 +564,30 @@ func TestQuery_Match(t *testing.T) {
 			name:  "keyword match in message",
 			query: "timeout",
 			entry: &storage.LogEntry{Level: "ERROR", Message: "connection timeout", Fields: map[string]interface{}{}},
+			want:  true,
+		},
+		{
+			name:  "quoted phrase keyword match",
+			query: `"connection timeout"`,
+			entry: &storage.LogEntry{Level: "ERROR", Message: "connection timeout", Fields: map[string]interface{}{}},
+			want:  true,
+		},
+		{
+			name:  "comparison query match",
+			query: "status >= 500",
+			entry: &storage.LogEntry{Level: "ERROR", Message: "test", Fields: map[string]interface{}{"status": 503}},
+			want:  true,
+		},
+		{
+			name:  "exists query match",
+			query: "request_id:*",
+			entry: &storage.LogEntry{Level: "ERROR", Message: "test", Fields: map[string]interface{}{"request_id": "req-1"}},
+			want:  true,
+		},
+		{
+			name:  "same field multi-value query match",
+			query: "level:(ERROR OR WARN)",
+			entry: &storage.LogEntry{Level: "WARN", Message: "test", Fields: map[string]interface{}{}},
 			want:  true,
 		},
 		{

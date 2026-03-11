@@ -65,7 +65,7 @@ func TestHTTPHandlers(t *testing.T) {
 		{name: "stats", method: http.MethodGet, target: "/stats", handler: s.handleStats, wantStatus: http.StatusOK},
 		{name: "query method check", method: http.MethodGet, target: "/query", handler: s.handleQuery, wantStatus: http.StatusMethodNotAllowed},
 		{name: "query invalid json", method: http.MethodPost, target: "/query", body: "{", handler: s.handleQuery, wantStatus: http.StatusBadRequest},
-		{name: "query invalid lucene", method: http.MethodPost, target: "/query", body: `{"query":"level:[bad"}`, handler: s.handleQuery, wantStatus: http.StatusBadRequest},
+		{name: "query invalid legacy syntax", method: http.MethodPost, target: "/query", body: `{"query":"level:[bad"}`, handler: s.handleQuery, wantStatus: http.StatusBadRequest},
 		{
 			name:       "query defaults and time range",
 			method:     http.MethodPost,
@@ -160,6 +160,38 @@ func TestWebSocketSubscribeAndBroadcast(t *testing.T) {
 
 	if err := conn.WriteJSON(map[string]string{"action": "unsubscribe"}); err != nil {
 		t.Fatalf("WriteJSON unsubscribe: %v", err)
+	}
+}
+
+func TestWebSocketInvalidQuerySendsError(t *testing.T) {
+	db := newTestStorage(t)
+	s := NewServer(db, nil)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/logs", s.handleWebSocket)
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/logs"
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("Dial() error = %v", err)
+	}
+	defer conn.Close()
+
+	if err := conn.WriteJSON(map[string]string{"action": "subscribe", "query": "level:[bad"}); err != nil {
+		t.Fatalf("WriteJSON subscribe: %v", err)
+	}
+
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	var msg map[string]interface{}
+	if err := conn.ReadJSON(&msg); err != nil {
+		t.Fatalf("ReadJSON error response: %v", err)
+	}
+	if msg["type"] != "error" {
+		t.Fatalf("expected error message, got %#v", msg)
+	}
+	if !strings.Contains(fmt.Sprintf("%v", msg["message"]), "Invalid query") {
+		t.Fatalf("expected invalid query message, got %#v", msg)
 	}
 }
 

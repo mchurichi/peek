@@ -17,9 +17,9 @@
 
 **Purpose**: Create the shared implementation and verification scaffolding for the KQL migration.
 
-- [ ] T001 Create the KQL parser and test entrypoint files `pkg/query/kql.go`, `pkg/query/kql_test.go`, and `pkg/query/kql_behavior_test.go`
-- [ ] T002 [P] Add shared KQL HTTP and WebSocket assertion helpers in `pkg/server/server_test.go` and `e2e/helpers.mjs`
-- [ ] T003 [P] Prepare KQL-oriented screenshot and sample-query fixtures in `e2e/screenshot.mjs` and `e2e/loggen.mjs`
+- [X] T001 Create the KQL parser and test entrypoint files `pkg/query/kql.go`, `pkg/query/kql_test.go`, and `pkg/query/kql_behavior_test.go`
+- [X] T002 [P] Add shared KQL HTTP and WebSocket assertion helpers in `pkg/server/server_test.go` and `e2e/helpers.mjs`
+- [X] T003 [P] Prepare KQL-oriented screenshot and sample-query fixtures in `e2e/screenshot.mjs` and `e2e/loggen.mjs`
 
 ---
 
@@ -29,11 +29,11 @@
 
 **⚠️ CRITICAL**: No user story work should start until this phase is complete.
 
-- [ ] T004 Migrate shared query types and `Filter.Match(*LogEntry) bool` compatibility from `pkg/query/lucene.go` into `pkg/query/kql.go`
-- [ ] T005 [P] Repoint `/query` and `/logs` from Lucene parsing to KQL parsing in `pkg/server/server.go` and `pkg/server/server_test.go`
-- [ ] T006 [P] Preserve `FieldInfo` and time-range contract compatibility for KQL autocomplete in `pkg/storage/types.go`, `pkg/storage/badger.go`, and `pkg/server/server.go`
-- [ ] T007 [P] Add shared invalid-query and migration-status plumbing in `pkg/server/server.go`, `pkg/server/server_test.go`, and `pkg/server/index.html`
-- [ ] T008 Remove the retired Lucene parser implementation and test files `pkg/query/lucene.go`, `pkg/query/lucene_test.go`, and `pkg/query/lucene_behavior_test.go` once `pkg/query/kql.go` is wired everywhere
+- [X] T004 Migrate shared query types and `Filter.Match(*LogEntry) bool` compatibility from `pkg/query/lucene.go` into `pkg/query/kql.go`
+- [X] T005 [P] Repoint `/query` and `/logs` from Lucene parsing to KQL parsing in `pkg/server/server.go` and `pkg/server/server_test.go`
+- [X] T006 [P] Preserve `FieldInfo` and time-range contract compatibility for KQL autocomplete in `pkg/storage/types.go`, `pkg/storage/badger.go`, and `pkg/server/server.go`
+- [X] T007 [P] Add shared invalid-query and migration-status plumbing in `pkg/server/server.go`, `pkg/server/server_test.go`, and `pkg/server/index.html`
+- [X] T008 Remove the retired Lucene parser implementation and test files `pkg/query/lucene.go`, `pkg/query/lucene_test.go`, and `pkg/query/lucene_behavior_test.go` once `pkg/query/kql.go` is wired everywhere
 
 **Checkpoint**: KQL runtime plumbing is in place and all user stories can build on one parser mode.
 
@@ -47,17 +47,17 @@
 
 ### Tests for User Story 1
 
-- [ ] T009 [P] [US1] Add parser parity coverage for KQL match-all, field, phrase, boolean, wildcard, exists, and grouped queries in `pkg/query/kql_test.go`
-- [ ] T010 [P] [US1] Add KQL edge-case coverage for relative time, comparison ranges, inconsistent numeric values, and legacy Lucene rejection in `pkg/query/kql_behavior_test.go`
-- [ ] T011 [P] [US1] Update HTTP and WebSocket contract tests for KQL success and corrective failure cases in `pkg/server/server_test.go`
+- [X] T009 [P] [US1] Add parser parity coverage for KQL match-all, field, phrase, boolean, wildcard, exists, and grouped queries in `pkg/query/kql_test.go`
+- [X] T010 [P] [US1] Add KQL edge-case coverage for relative time, comparison ranges, inconsistent numeric values, and legacy Lucene rejection in `pkg/query/kql_behavior_test.go`
+- [X] T011 [P] [US1] Update HTTP and WebSocket contract tests for KQL success and corrective failure cases in `pkg/server/server_test.go`
 
 ### Implementation for User Story 1
 
-- [ ] T012 [US1] Implement the bounded Peek KQL grammar and filter construction in `pkg/query/kql.go`
-- [ ] T013 [US1] Keep `/query` execution aligned with KQL semantics and external `start`/`end` bounds in `pkg/server/server.go`
-- [ ] T014 [US1] Keep `/logs` subscription filtering and client-visible invalid-query results aligned with `/query` in `pkg/server/server.go`
-- [ ] T015 [US1] Verify free-text, field, exists, and comparison behavior against `storage.LogEntry` values in `pkg/query/kql.go` and `pkg/storage/types.go`
-- [ ] T016 [US1] Record the core KQL verification flow and commands in `specs/001-kql-query-migration/quickstart.md`
+- [X] T012 [US1] Implement the bounded Peek KQL grammar and filter construction in `pkg/query/kql.go`
+- [X] T013 [US1] Keep `/query` execution aligned with KQL semantics and external `start`/`end` bounds in `pkg/server/server.go`
+- [X] T014 [US1] Keep `/logs` subscription filtering and client-visible invalid-query results aligned with `/query` in `pkg/server/server.go`
+- [X] T015 [US1] Verify free-text, field, exists, and comparison behavior against `storage.LogEntry` values in `pkg/query/kql.go` and `pkg/storage/types.go`
+- [X] T016 [US1] Record the core KQL verification flow and commands in `specs/001-kql-query-migration/quickstart.md`
 
 **Checkpoint**: User Story 1 delivers a working KQL backend with explicit migration-aware failure handling.
 
@@ -71,17 +71,17 @@
 
 ### Tests for User Story 2
 
-- [ ] T017 [P] [US2] Update search editor highlighting and caret-alignment coverage for KQL tokens in `e2e/search.spec.mjs` and `e2e/search-caret.spec.mjs`
-- [ ] T018 [P] [US2] Update click-to-filter and copy-interference coverage for KQL query generation in `e2e/field-filter-append.spec.mjs` and `e2e/copy.spec.mjs`
-- [ ] T019 [P] [US2] Update history, starred-query migration, and time-range interaction coverage in `e2e/query-history.spec.mjs`, `e2e/datetime.spec.mjs`, and `e2e/sliding-window.spec.mjs`
+- [X] T017 [P] [US2] Update search editor highlighting and caret-alignment coverage for KQL tokens in `e2e/search.spec.mjs` and `e2e/search-caret.spec.mjs`
+- [X] T018 [P] [US2] Update click-to-filter and copy-interference coverage for KQL query generation in `e2e/field-filter-append.spec.mjs` and `e2e/copy.spec.mjs`
+- [X] T019 [P] [US2] Update history, starred-query migration, and time-range interaction coverage in `e2e/query-history.spec.mjs`, `e2e/datetime.spec.mjs`, and `e2e/sliding-window.spec.mjs`
 
 ### Implementation for User Story 2
 
-- [ ] T020 [US2] Replace the Lucene tokenizer/highlighter with KQL-aware tokenization in `pkg/server/index.html`
-- [ ] T021 [US2] Update autocomplete suggestions for fields, values, boolean operators, comparisons, and existence flows in `pkg/server/index.html`
-- [ ] T022 [US2] Update field-value append logic so clicks emit valid KQL in `pkg/server/index.html`
-- [ ] T023 [US2] Migrate query history and starred-query persistence to support KQL reuse and `needs-attention` states in `pkg/server/index.html`
-- [ ] T024 [US2] Keep levelless rows, table behavior, and UI preference flows compatible with KQL-driven filtering in `pkg/server/index.html`, `e2e/levelless.spec.mjs`, and `e2e/ui-prefs.spec.mjs`
+- [X] T020 [US2] Replace the Lucene tokenizer/highlighter with KQL-aware tokenization in `pkg/server/index.html`
+- [X] T021 [US2] Update autocomplete suggestions for fields, values, boolean operators, comparisons, and existence flows in `pkg/server/index.html`
+- [X] T022 [US2] Update field-value append logic so clicks emit valid KQL in `pkg/server/index.html`
+- [X] T023 [US2] Migrate query history and starred-query persistence to support KQL reuse and `needs-attention` states in `pkg/server/index.html`
+- [X] T024 [US2] Keep levelless rows, table behavior, and UI preference flows compatible with KQL-driven filtering in `pkg/server/index.html`, `e2e/levelless.spec.mjs`, and `e2e/ui-prefs.spec.mjs`
 
 **Checkpoint**: User Story 2 delivers a KQL-aware editor and saved-query experience without breaking existing browsing interactions.
 
@@ -95,15 +95,15 @@
 
 ### Tests for User Story 3
 
-- [ ] T025 [P] [US3] Extend migration-guidance assertions for unsupported legacy syntax and saved-query recovery in `e2e/search.spec.mjs` and `e2e/query-history.spec.mjs`
+- [X] T025 [P] [US3] Extend migration-guidance assertions for unsupported legacy syntax and saved-query recovery in `e2e/search.spec.mjs` and `e2e/query-history.spec.mjs`
 
 ### Implementation for User Story 3
 
-- [ ] T026 [US3] Replace Lucene-centric end-user query examples and migration guidance in `README.md`
-- [ ] T027 [US3] Update technical query API and testing guidance for Peek KQL in `docs/README.md`
-- [ ] T028 [US3] Remove Lucene terminology from repo guidance and query-language references in `AGENTS.md`
-- [ ] T029 [US3] Update in-product migration copy, empty states, and corrective guidance in `pkg/server/index.html`
-- [ ] T030 [US3] Regenerate KQL-first screenshot inputs and output in `e2e/screenshot.mjs` and `docs/screenshot.png`
+- [X] T026 [US3] Replace Lucene-centric end-user query examples and migration guidance in `README.md`
+- [X] T027 [US3] Update technical query API and testing guidance for Peek KQL in `docs/README.md`
+- [X] T028 [US3] Remove Lucene terminology from repo guidance and query-language references in `AGENTS.md`
+- [X] T029 [US3] Update in-product migration copy, empty states, and corrective guidance in `pkg/server/index.html`
+- [X] T030 [US3] Regenerate KQL-first screenshot inputs and output in `e2e/screenshot.mjs` and `docs/screenshot.png`
 
 **Checkpoint**: User Story 3 delivers KQL-first docs and migration guidance across product, docs, and assets.
 
@@ -113,9 +113,9 @@
 
 **Purpose**: Final cleanup, repo-wide consistency, and full verification.
 
-- [ ] T031 [P] Sweep remaining Lucene strings from test titles and fixture comments in `pkg/server/server_test.go`, `e2e/search.spec.mjs`, `e2e/field-filter-append.spec.mjs`, and `e2e/screenshot.mjs`
-- [ ] T032 [P] Re-run and stabilize the cross-story acceptance suites in `e2e/search.spec.mjs`, `e2e/query-history.spec.mjs`, `e2e/datetime.spec.mjs`, `e2e/copy.spec.mjs`, `e2e/levelless.spec.mjs`, and `e2e/sliding-window.spec.mjs`
-- [ ] T033 Run and record the final `mise exec -- ...` validation commands in `specs/001-kql-query-migration/quickstart.md`
+- [X] T031 [P] Sweep remaining Lucene strings from test titles and fixture comments in `pkg/server/server_test.go`, `e2e/search.spec.mjs`, `e2e/field-filter-append.spec.mjs`, and `e2e/screenshot.mjs`
+- [X] T032 [P] Re-run and stabilize the cross-story acceptance suites in `e2e/search.spec.mjs`, `e2e/query-history.spec.mjs`, `e2e/datetime.spec.mjs`, `e2e/copy.spec.mjs`, `e2e/levelless.spec.mjs`, and `e2e/sliding-window.spec.mjs`
+- [X] T033 Run and record the final `mise exec -- ...` validation commands in `specs/001-kql-query-migration/quickstart.md`
 
 ---
 

@@ -12,14 +12,14 @@ $ kubectl logs -l app=frontdesk -w | peek
 2026/02/18 02:30:20 Starting server on http://localhost:8080
 ```
 
-![Peek — Lucene query filtering errors and warnings across microservices](docs/screenshot.png)
+![Peek — KQL filtering for errors and warnings across microservices](docs/screenshot.png)
 
 ## Features
 
 - 🚀 **Single binary** - No external dependencies
 - 📊 **Structured log support** - Auto-detects JSON and logfmt (key-value) formats
 - 💾 **Local storage** - BadgerDB with configurable retention
-- 🔍 **Lucene queries** - Powerful search syntax
+- 🔍 **KQL queries** - Structured log filtering with field, wildcard, exists, and comparison support
 - ⚡ **Real-time updates** - WebSocket streaming
 - 🎨 **Web UI** - Clean, minimal interface
 - ⚙️ **Configurable** - TOML config + CLI flags
@@ -210,7 +210,7 @@ peek db clean --level DEBUG --force
 
 ## Query Syntax
 
-Peek supports ElasticSearch Lucene query syntax:
+Peek supports a bounded KQL syntax tailored for log exploration:
 
 ```
 # Keyword search
@@ -222,19 +222,24 @@ service:api
 user_id:123
 
 # Boolean operators
-level:ERROR AND service:api
-level:ERROR OR level:WARN
-NOT level:DEBUG
+level:ERROR and service:api
+level:(ERROR or WARN)
+not level:DEBUG
 
-# Wildcards
+# Wildcards and existence
 message:*timeout*
 service:api*
+request_id:*
+
+# Comparisons
+status >= 500
+duration_ms < 2000
 
 # Quoted phrases
 message:"connection refused"
 
 # Complex queries
-(level:ERROR OR level:CRITICAL) AND service:api
+(level:ERROR or level:WARN) and service:api
 ```
 
 ## Log Formats
@@ -304,7 +309,7 @@ cat another-app.log | peek
 # In the web UI:
 level:ERROR                    # Show only errors
 service:api                    # Filter by service
-level:ERROR AND service:auth   # Combine filters
+level:ERROR and service:auth   # Combine filters
 message:*timeout*              # Wildcard search
 ```
 
@@ -330,7 +335,7 @@ peek/
 ├── pkg/
 │   ├── parser/         # Log format parsers
 │   ├── storage/        # BadgerDB storage layer
-│   ├── query/          # Lucene query engine
+│   ├── query/          # KQL query engine
 │   └── server/         # HTTP server, WebSocket, embedded UI (index.html)
 ├── internal/
 │   └── config/         # Configuration management

@@ -25,7 +25,7 @@ test.describe('search-caret', () => {
     await delay(800);
 
     const input = page.locator('.search-editor-input');
-    const longQuery = 'pod:pod-14 AND level:ERROR AND message:*timeout* AND region:us-west-2 AND service:api-gateway AND env:prod';
+    const longQuery = 'pod:pod-14 and level:ERROR and message:*timeout* and region:us-west-2 and service:api-gateway and env:prod';
     await input.fill(longQuery);
 
     await page.evaluate(() => {

@@ -177,8 +177,8 @@ try {
   await page.goto(`http://localhost:${PORT}`);
   await page.waitForSelector('.log-table-body .col-chevron');
 
-  // Type a Lucene query and execute
-  await page.fill('.search-editor-input', 'level:ERROR OR level:WARN');
+  // Type a KQL query and execute
+  await page.fill('.search-editor-input', 'level:(ERROR OR WARN)');
   await page.press('.search-editor-input', 'Enter');
   await page.waitForTimeout(500);
   await page.waitForSelector('.log-table-body .col-chevron');
