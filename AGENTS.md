@@ -160,3 +160,10 @@ BadgerDB keys: `log:{timestamp_nano}:{id}` — enables time-range key seeking.
 - **Installer script compatibility**: keep `scripts/get-peek.sh` POSIX `sh` and aligned with GoReleaser asset names/checksum output
 - **Keep AGENTS.md up to date**: any change that alters build commands, project structure, dependencies, architecture, conventions, or critical rules documented here MUST include a corresponding update to this file in the same commit
 - **Release labels are mandatory for PRs**: exactly one of `release:patch`, `release:minor`, `release:major`, or `skip-release` is required before merge
+
+## Active Technologies
+- Go 1.24+ with embedded HTML/CSS/JS in `pkg/server/index.html` + Go standard library, BadgerDB, Gorilla WebSocket, BurntSushi/toml, VanJS, Playwright, and official KQL semantics from Elastic documentation as the behavioral reference (001-kql-query-migration)
+- BadgerDB at `~/.peek/db`; preserve stored log shape and `log:{timestamp_nano}:{id}` keys with no data migration (001-kql-query-migration)
+
+## Recent Changes
+- 001-kql-query-migration: Added Go 1.24+ with embedded HTML/CSS/JS in `pkg/server/index.html` + Go standard library, BadgerDB, Gorilla WebSocket, BurntSushi/toml, VanJS, Playwright, and official KQL semantics from Elastic documentation as the behavioral reference
