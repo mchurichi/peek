@@ -1033,3 +1033,164 @@ func TestWildcardFilterQuestionMark(t *testing.T) {
 		})
 	}
 }
+
+func TestLowercaseBooleanOperators(t *testing.T) {
+	entry := &storage.LogEntry{
+		Level:   "ERROR",
+		Message: "connection timeout",
+		Fields:  map[string]interface{}{"service": "api"},
+	}
+
+	tests := []struct {
+		name  string
+		query string
+		want  bool
+	}{
+		{"lowercase and", "level:ERROR and service:api", true},
+		{"lowercase or", "level:INFO or service:api", true},
+		{"lowercase not", "not level:INFO", true},
+		{"lowercase or no match", "level:INFO or service:web", false},
+		{"uppercase AND still works", "level:ERROR AND service:api", true},
+		{"mixed case", "level:ERROR and NOT service:web", true},
+		// word-boundary: 'android' must not be split on 'and'
+		{"android keyword not split", "android", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			q, err := Parse(tt.query)
+			if err != nil {
+				t.Fatalf("Parse(%q) error = %v", tt.query, err)
+			}
+			if got := q.Match(entry); got != tt.want {
+				t.Errorf("Match() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNumericComparisonFilter(t *testing.T) {
+	entry := &storage.LogEntry{
+		Level:   "INFO",
+		Message: "ok",
+		Fields:  map[string]interface{}{"status": 503, "latency": "45.5"},
+	}
+
+	tests := []struct {
+		name   string
+		filter *NumericComparisonFilter
+		want   bool
+	}{
+		{"gt match", &NumericComparisonFilter{Field: "status", Op: ">", Value: 500}, true},
+		{"gt no match", &NumericComparisonFilter{Field: "status", Op: ">", Value: 503}, false},
+		{"gte match boundary", &NumericComparisonFilter{Field: "status", Op: ">=", Value: 503}, true},
+		{"gte no match", &NumericComparisonFilter{Field: "status", Op: ">=", Value: 504}, false},
+		{"lt match", &NumericComparisonFilter{Field: "status", Op: "<", Value: 600}, true},
+		{"lt no match", &NumericComparisonFilter{Field: "status", Op: "<", Value: 503}, false},
+		{"lte match boundary", &NumericComparisonFilter{Field: "status", Op: "<=", Value: 503}, true},
+		{"string numeric field", &NumericComparisonFilter{Field: "latency", Op: ">", Value: 40}, true},
+		{"missing field", &NumericComparisonFilter{Field: "missing", Op: ">", Value: 0}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.filter.Match(entry); got != tt.want {
+				t.Errorf("NumericComparisonFilter.Match() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTimestampComparisonFilter(t *testing.T) {
+	pivot := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+	before := pivot.Add(-time.Hour)
+	after := pivot.Add(time.Hour)
+
+	tests := []struct {
+		name   string
+		filter *TimestampComparisonFilter
+		ts     time.Time
+		want   bool
+	}{
+		{"gt after", &TimestampComparisonFilter{Op: ">", Value: pivot}, after, true},
+		{"gt before", &TimestampComparisonFilter{Op: ">", Value: pivot}, before, false},
+		{"gt at boundary", &TimestampComparisonFilter{Op: ">", Value: pivot}, pivot, false},
+		{"gte at boundary", &TimestampComparisonFilter{Op: ">=", Value: pivot}, pivot, true},
+		{"lt before", &TimestampComparisonFilter{Op: "<", Value: pivot}, before, true},
+		{"lt at boundary", &TimestampComparisonFilter{Op: "<", Value: pivot}, pivot, false},
+		{"lte at boundary", &TimestampComparisonFilter{Op: "<=", Value: pivot}, pivot, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			entry := &storage.LogEntry{Timestamp: tt.ts}
+			if got := tt.filter.Match(entry); got != tt.want {
+				t.Errorf("TimestampComparisonFilter.Match() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestComparisonOperatorParsing(t *testing.T) {
+	tests := []struct {
+		name    string
+		query   string
+		entry   *storage.LogEntry
+		want    bool
+		wantErr bool
+	}{
+		{
+			name:  "numeric gt match",
+			query: "status > 499",
+			entry: &storage.LogEntry{Level: "ERROR", Message: "err", Fields: map[string]interface{}{"status": 503}},
+			want:  true,
+		},
+		{
+			name:  "numeric gt no match",
+			query: "status > 503",
+			entry: &storage.LogEntry{Level: "ERROR", Message: "err", Fields: map[string]interface{}{"status": 503}},
+			want:  false,
+		},
+		{
+			name:  "nospace gte",
+			query: "status>=503",
+			entry: &storage.LogEntry{Level: "ERROR", Message: "err", Fields: map[string]interface{}{"status": 503}},
+			want:  true,
+		},
+		{
+			name:  "numeric lt match",
+			query: "latency < 100",
+			entry: &storage.LogEntry{Level: "INFO", Message: "ok", Fields: map[string]interface{}{"latency": 50}},
+			want:  true,
+		},
+		{
+			name:  "comparison with lowercase and",
+			query: "status >= 500 and level:ERROR",
+			entry: &storage.LogEntry{Level: "ERROR", Message: "err", Fields: map[string]interface{}{"status": 503}},
+			want:  true,
+		},
+		{
+			name:    "invalid numeric value",
+			query:   "status > notanumber",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			q, err := Parse(tt.query)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("Parse(%q) expected error", tt.query)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Parse(%q) error = %v", tt.query, err)
+			}
+			if got := q.Match(tt.entry); got != tt.want {
+				t.Errorf("Match() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

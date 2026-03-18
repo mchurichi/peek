@@ -1859,21 +1859,30 @@
                     continue
                 }
 
-                // Word token (field:value, operator, or bare value)
-                // Special handling: when a regex literal is present (field:/regex/),
-                // the word reader must not stop at ( or ) inside the regex.
+                // Comparison operators: >=, <=, >, <
+                if (ch === '>' || ch === '<') {
+                    let op = ch
+                    if (i + 1 < text.length && text[i + 1] === '=') op += '='
+                    tokens.push({type: 'op', text: op})
+                    i += op.length
+                    continue
+                }
+
+                // Word token (field:value, operator, or bare value).
+                // inRegex state: when inside field:/regex/, consume verbatim so
+                // that (, ), >, < inside the pattern don't terminate the word.
                 let j = i
-                let inRegex = false  // true once we have consumed the opening "/"
+                let inRegex = false
                 while (j < text.length) {
                     const c = text[j]
                     if (inRegex) {
-                        // Inside regex: consume everything until the closing "/"
+                        // Inside regex: consume until closing "/"
                         if (c === '/') { j++; inRegex = false; break }
                         j++
                     } else {
-                        // Normal word: stop at whitespace or grouping chars
-                        if (/[\s"()\[\]{}]/.test(c)) break
-                        // Detect field:/ transition; consume both chars and enter regex mode
+                        // Normal: stop at whitespace, grouping, or comparison chars
+                        if (/[\s"()\[\]{}<>]/.test(c)) break
+                        // Detect field:/ transition and enter regex mode
                         if (c === ':' && j + 1 < text.length && text[j + 1] === '/') {
                             inRegex = true
                             j += 2 // consume :/
@@ -1886,7 +1895,7 @@
                 i = j
                 if (!word) { i++; continue }
 
-                if (word === 'AND' || word === 'OR' || word === 'NOT') {
+                if (['AND', 'OR', 'NOT'].includes(word.toUpperCase()) && word.length <= 3) {
                     tokens.push({type: 'op', text: word})
                 } else {
                     const colonIdx = word.indexOf(':')
@@ -1943,9 +1952,9 @@
                     case 'field':    return `<span class="hl-field">${e}</span>`
                     case 'colon':    return `<span class="hl-colon">${e}</span>`
                     case 'quote':    return `<span class="hl-quote">${e}</span>`
+                    case 'regex':    return `<span class="hl-regex">${e}</span>`
                     case 'wildcard': return `<span class="hl-wildcard">${e}</span>`
                     case 'range':    return `<span class="hl-range">${e}</span>`
-                    case 'regex':    return `<span class="hl-regex">${e}</span>`
                     case 'paren':    return `<span class="hl-paren">${e}</span>`
                     case 'error':    return `<span class="hl-error">${e}</span>`
                     default:         return e

@@ -67,7 +67,7 @@ func (p *parser) parseOr() (Filter, error) {
 
 	for {
 		p.skipWhitespace()
-		if p.peek("OR") {
+		if p.peekOp("OR") {
 			p.consume(2)
 			p.skipWhitespace()
 			right, err := p.parseAnd()
@@ -91,7 +91,7 @@ func (p *parser) parseAnd() (Filter, error) {
 
 	for {
 		p.skipWhitespace()
-		if p.peek("AND") {
+		if p.peekOp("AND") {
 			p.consume(3)
 			p.skipWhitespace()
 			right, err := p.parseNot()
@@ -99,7 +99,7 @@ func (p *parser) parseAnd() (Filter, error) {
 				return nil, err
 			}
 			left = &AndFilter{Left: left, Right: right}
-		} else if p.pos < len(p.input) && !p.peek("OR") && !p.peek(")") {
+		} else if p.pos < len(p.input) && !p.peekOp("OR") && !p.peek(")") {
 			// Implicit AND
 			right, err := p.parseNot()
 			if err != nil {
@@ -116,7 +116,7 @@ func (p *parser) parseAnd() (Filter, error) {
 
 func (p *parser) parseNot() (Filter, error) {
 	p.skipWhitespace()
-	if p.peek("NOT") {
+	if p.peekOp("NOT") {
 		p.consume(3)
 		p.skipWhitespace()
 		filter, err := p.parsePrimary()
@@ -221,6 +221,19 @@ func (p *parser) parsePrimary() (Filter, error) {
 	if len(token) >= 2 && token[0] == '"' && token[len(token)-1] == '"' {
 		return &KeywordFilter{Keyword: token[1 : len(token)-1]}, nil
 	}
+
+	// Check for comparison operator: field > value, field >= value, etc.
+	savedPos := p.pos
+	p.skipWhitespace()
+	if op := p.readComparisonOp(); op != "" {
+		p.skipWhitespace()
+		valToken := p.readToken()
+		if valToken == "" {
+			return nil, fmt.Errorf("expected value after '%s'", op)
+		}
+		return p.makeComparisonFilter(token, op, valToken)
+	}
+	p.pos = savedPos
 
 	// Keyword search (searches message and fields)
 	return &KeywordFilter{Keyword: token}, nil
@@ -380,10 +393,23 @@ func (p *parser) readToken() string {
 		return p.input[start:p.pos]
 	}
 
-	// Read until whitespace or special char
+	// Read until whitespace or special char.
+	// When :/regex/ is detected the regex body is consumed verbatim so that
+	// characters like ( ) > < inside the pattern don't end the token early.
 	for p.pos < len(p.input) {
 		ch := p.input[p.pos]
-		if ch == ' ' || ch == '(' || ch == ')' {
+		if ch == ':' && p.pos+1 < len(p.input) && p.input[p.pos+1] == '/' {
+			// field:/regex/ — consume ':' and the slash-delimited pattern
+			p.pos += 2 // consume ':' and opening '/'
+			for p.pos < len(p.input) && p.input[p.pos] != '/' {
+				p.pos++
+			}
+			if p.pos < len(p.input) {
+				p.pos++ // consume closing '/'
+			}
+			break
+		}
+		if ch == ' ' || ch == '(' || ch == ')' || ch == '>' || ch == '<' {
 			break
 		}
 		p.pos++
@@ -403,6 +429,65 @@ func (p *parser) peek(str string) bool {
 		return false
 	}
 	return p.input[p.pos:p.pos+len(str)] == str
+}
+
+// peekOp checks for a boolean operator keyword (AND/OR/NOT) case-insensitively,
+// ensuring it is followed by whitespace, '(', or end-of-input (word boundary).
+func (p *parser) peekOp(op string) bool {
+	n := len(op)
+	if p.pos+n > len(p.input) {
+		return false
+	}
+	if strings.ToUpper(p.input[p.pos:p.pos+n]) != op {
+		return false
+	}
+	end := p.pos + n
+	if end >= len(p.input) {
+		return true
+	}
+	ch := p.input[end]
+	return ch == ' ' || ch == '('
+}
+
+// readComparisonOp consumes and returns a comparison operator (>=, <=, >, <)
+// at the current position, or returns "" if none is present.
+func (p *parser) readComparisonOp() string {
+	if p.pos+1 < len(p.input) {
+		two := p.input[p.pos : p.pos+2]
+		if two == ">=" || two == "<=" {
+			p.pos += 2
+			return two
+		}
+	}
+	if p.pos < len(p.input) {
+		ch := p.input[p.pos]
+		if ch == '>' || ch == '<' {
+			p.pos++
+			return string(ch)
+		}
+	}
+	return ""
+}
+
+// makeComparisonFilter builds a comparison filter for field op value.
+// For "timestamp" the value is parsed as a time; otherwise as a float.
+func (p *parser) makeComparisonFilter(field, op, val string) (Filter, error) {
+	// Strip surrounding quotes if present
+	if len(val) >= 2 && val[0] == '"' && val[len(val)-1] == '"' {
+		val = val[1 : len(val)-1]
+	}
+	if field == "timestamp" {
+		t := p.parseTimeValue(val)
+		if t.IsZero() {
+			return nil, fmt.Errorf("invalid timestamp value %q", val)
+		}
+		return &TimestampComparisonFilter{Op: op, Value: t}, nil
+	}
+	n, err := strconv.ParseFloat(val, 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid numeric value %q for comparison operator '%s'", val, op)
+	}
+	return &NumericComparisonFilter{Field: field, Op: op, Value: n}, nil
 }
 
 func (p *parser) peekChar(ch byte) bool {
@@ -628,4 +713,65 @@ func (f *NumericRangeFilter) Match(entry *storage.LogEntry) bool {
 	}
 
 	return value >= f.Start && value <= f.End
+}
+
+// NumericComparisonFilter filters numeric fields with >, <, >=, <= operators
+type NumericComparisonFilter struct {
+	Field string
+	Op    string
+	Value float64
+}
+
+func (f *NumericComparisonFilter) Match(entry *storage.LogEntry) bool {
+	var value float64
+	if v, ok := entry.Fields[f.Field]; ok {
+		switch val := v.(type) {
+		case float64:
+			value = val
+		case int:
+			value = float64(val)
+		case string:
+			if parsed, err := strconv.ParseFloat(val, 64); err == nil {
+				value = parsed
+			} else {
+				return false
+			}
+		default:
+			return false
+		}
+	} else {
+		return false
+	}
+	switch f.Op {
+	case ">":
+		return value > f.Value
+	case ">=":
+		return value >= f.Value
+	case "<":
+		return value < f.Value
+	case "<=":
+		return value <= f.Value
+	}
+	return false
+}
+
+// TimestampComparisonFilter filters by timestamp with >, <, >=, <= operators
+type TimestampComparisonFilter struct {
+	Op    string
+	Value time.Time
+}
+
+func (f *TimestampComparisonFilter) Match(entry *storage.LogEntry) bool {
+	t := entry.Timestamp
+	switch f.Op {
+	case ">":
+		return t.After(f.Value)
+	case ">=":
+		return !t.Before(f.Value)
+	case "<":
+		return t.Before(f.Value)
+	case "<=":
+		return !t.After(f.Value)
+	}
+	return false
 }
