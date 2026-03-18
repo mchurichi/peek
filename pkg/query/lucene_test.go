@@ -725,11 +725,10 @@ func TestExistenceFilter(t *testing.T) {
 
 func TestRegexFilter(t *testing.T) {
 	tests := []struct {
-		name    string
-		filter  *RegexFilter
-		entry   *storage.LogEntry
-		want    bool
-		wantErr bool
+		name   string
+		filter *RegexFilter
+		entry  *storage.LogEntry
+		want   bool
 	}{
 		{
 			name:   "regex matches service field",

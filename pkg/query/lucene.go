@@ -184,6 +184,9 @@ func (p *parser) parsePrimary() (Filter, error) {
 			return p.parseRange(field, value)
 		}
 
+		// Strip boost suffix before other value checks so "foo"^2 parses correctly
+		value = stripBoost(value)
+
 		// Handle quoted strings (phrase match)
 		if strings.HasPrefix(value, "\"") {
 			value = strings.Trim(value, "\"")
@@ -200,9 +203,6 @@ func (p *parser) parsePrimary() (Filter, error) {
 			return &RegexFilter{Field: field, Regex: re}, nil
 		}
 
-		// Strip boost suffix (^n) — accepted but ignored for filtering
-		value = stripBoost(value)
-
 		// Handle existence: field:*
 		if value == "*" {
 			return &ExistenceFilter{Field: field}, nil
@@ -210,7 +210,11 @@ func (p *parser) parsePrimary() (Filter, error) {
 
 		// Handle wildcards (* and ?)
 		if strings.ContainsAny(value, "*?") {
-			return &WildcardFilter{Field: field, Pattern: value}, nil
+			re, err := compileWildcard(value)
+			if err != nil {
+				return nil, fmt.Errorf("invalid wildcard pattern %q: %w", value, err)
+			}
+			return &WildcardFilter{Field: field, Pattern: value, re: re}, nil
 		}
 
 		return &FieldFilter{Field: field, Value: value, Exact: false}, nil
@@ -602,6 +606,27 @@ func (f *KeywordFilter) Match(entry *storage.LogEntry) bool {
 type WildcardFilter struct {
 	Field   string
 	Pattern string
+	re      *regexp.Regexp // compiled from Pattern; nil only in direct test construction
+}
+
+// compileWildcard turns a wildcard pattern into a compiled case-insensitive
+// regex. Non-wildcard characters are escaped so dots, parens, etc. are
+// treated as literals rather than regex metacharacters.
+func compileWildcard(pattern string) (*regexp.Regexp, error) {
+	var sb strings.Builder
+	sb.WriteString("(?i)^")
+	for _, ch := range pattern {
+		switch ch {
+		case '*':
+			sb.WriteString(".*")
+		case '?':
+			sb.WriteByte('.')
+		default:
+			sb.WriteString(regexp.QuoteMeta(string(ch)))
+		}
+	}
+	sb.WriteByte('$')
+	return regexp.Compile(sb.String())
 }
 
 func (f *WildcardFilter) Match(entry *storage.LogEntry) bool {
@@ -620,12 +645,15 @@ func (f *WildcardFilter) Match(entry *storage.LogEntry) bool {
 		}
 	}
 
-	// Convert wildcard pattern to regex (* → .*, ? → .)
-	pattern := strings.ReplaceAll(f.Pattern, "*", ".*")
-	pattern = strings.ReplaceAll(pattern, "?", ".")
-	pattern = "^" + pattern + "$"
-	matched, _ := regexp.MatchString("(?i)"+pattern, value)
-	return matched
+	re := f.re
+	if re == nil {
+		// Fallback for filters constructed directly in tests without the parser.
+		re, _ = compileWildcard(f.Pattern)
+		if re == nil {
+			return false
+		}
+	}
+	return re.MatchString(value)
 }
 
 // ExistenceFilter matches entries where the specified field is present.
@@ -641,6 +669,8 @@ func (f *ExistenceFilter) Match(entry *storage.LogEntry) bool {
 		return entry.Level != ""
 	case "message":
 		return entry.Message != ""
+	case "timestamp":
+		return !entry.Timestamp.IsZero()
 	default:
 		_, ok := entry.Fields[f.Field]
 		return ok

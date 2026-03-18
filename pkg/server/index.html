@@ -1873,6 +1873,7 @@
                 // that (, ), >, < inside the pattern don't terminate the word.
                 let j = i
                 let inRegex = false
+                let seenColon = false  // only the first ':' is the field separator
                 while (j < text.length) {
                     const c = text[j]
                     if (inRegex) {
@@ -1882,11 +1883,13 @@
                     } else {
                         // Normal: stop at whitespace, grouping, or comparison chars
                         if (/[\s"()\[\]{}<>]/.test(c)) break
-                        // Detect field:/ transition and enter regex mode
-                        if (c === ':' && j + 1 < text.length && text[j + 1] === '/') {
+                        // Only the first ':/' (the field-separator colon) starts a regex
+                        if (!seenColon && c === ':' && j + 1 < text.length && text[j + 1] === '/') {
                             inRegex = true
+                            seenColon = true
                             j += 2 // consume :/
                         } else {
+                            if (c === ':') seenColon = true
                             j++
                         }
                     }
