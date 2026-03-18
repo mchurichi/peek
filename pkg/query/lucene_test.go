@@ -33,6 +33,10 @@ func TestParse(t *testing.T) {
 		{"field boost syntax", "level:ERROR^3", false},
 		{"question mark wildcard", "service:api-?", false},
 		{"bare quoted phrase", `"connection refused"`, false},
+		{"dangling closing parenthesis", `level:ERROR)`, true},
+		{"extra closing parenthesis after group", `(level:ERROR))`, true},
+		{"implicit AND with trailing keyword", `level:ERROR foo`, false},
+		{"implicit AND after grouped expression", `(level:ERROR) bar`, false},
 	}
 
 	for _, tt := range tests {
