@@ -134,10 +134,27 @@ test.describe('field-exclude-button', () => {
     const scrollBefore = await getScroll(page);
     expect(scrollBefore).toBeGreaterThan(0);
 
-    await setQuery(page, '');
     await expandAndWait(page);
+
+    // Read a unique field value (user_id) from the expanded row's detail grid.
+    // The grid alternates: keyEl at even indices, valCell at odd indices.
+    // Excluding a unique user_id leaves 39 rows so scroll can be preserved.
+    const uniqueVal = await page.evaluate(() => {
+      const firstCell = document.querySelector('.field-val-cell');
+      const grid = firstCell?.parentElement;
+      if (!grid) return null;
+      const children = Array.from(grid.children);
+      for (let i = 1; i < children.length; i += 2) {
+        if (children[i - 1]?.textContent.trim() === 'user_id') {
+          return children[i].querySelector('.field-val')?.textContent.trim() ?? null;
+        }
+      }
+      return null;
+    });
+    expect(uniqueVal).toBeTruthy();
+
     const scrollAfterExpand = await getScroll(page);
-    expect(await clickExcludeForVal(page, 'api')).toBe(true);
+    expect(await clickExcludeForVal(page, uniqueVal)).toBe(true);
 
     const scrollAfterClick = await getScroll(page);
     const drift = Math.abs(scrollAfterClick - scrollAfterExpand);
