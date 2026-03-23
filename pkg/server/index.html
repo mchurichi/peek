@@ -2640,6 +2640,7 @@
                 const valEl = document.createElement('span')
                 valEl.className = 'field-val' + (isStack ? ' stack-trace' : '')
                 valEl.textContent = String(v)
+                valEl.addEventListener('click', e => { e.stopPropagation(); filterByField(k, String(v)) })
                 const filterBtn = document.createElement('button')
                 filterBtn.className = 'copy-btn field-filter-btn'
                 filterBtn.title = `Filter by ${k}:${v}`
@@ -2916,7 +2917,7 @@
                 if (logContainerEl && pinnedChanged && !newLogsAdded) {
                     preserveScroll = window.scrollPreserveValue > 0 ? window.scrollPreserveValue : logContainerEl.scrollTop
                     window.scrollPreserveValue = 0  // Reset after use
-                } else if (logContainerEl && logsChanged && !pinnedChanged && !autoScroll.val) {
+                } else if (logContainerEl && logsChanged && !pinnedChanged && (!autoScroll.val || window.scrollPreserveValue > 0)) {
                     preserveScroll = window.scrollPreserveValue > 0 ? window.scrollPreserveValue : logContainerEl.scrollTop
                     window.scrollPreserveValue = 0  // Reset after use
                 }
@@ -2965,7 +2966,7 @@
                     expandedIds.clear()
 
                     // Restore scroll position if only columns changed (not new logs)
-                    if (((pinnedChanged && !newLogsAdded) || (logsChanged && !pinnedChanged && !autoScroll.val)) && preserveScroll > 0 && logContainerEl) {
+                    if (((pinnedChanged && !newLogsAdded) || (logsChanged && !pinnedChanged && (!autoScroll.val || preserveScroll > 0))) && preserveScroll > 0 && logContainerEl) {
                         setTimeout(() => {
                             if (logContainerEl) {
                                 logContainerEl.scrollTop = preserveScroll
