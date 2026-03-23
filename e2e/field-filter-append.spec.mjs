@@ -29,11 +29,17 @@ test.describe('field-filter-append', () => {
 
   test('appends safe field tokens and preserves scroll', async ({ page }) => {
     const clickFieldVal = async (value) => page.evaluate((v) => {
-      const el = Array.from(document.querySelectorAll('.field-val'))
-        .find((e) => e.textContent.trim() === v);
-      if (!el) return false;
-      el.click();
-      return true;
+      const cells = document.querySelectorAll('.field-val-cell');
+      for (const cell of cells) {
+        const valEl = cell.querySelector('.field-val');
+        if (valEl && valEl.textContent.trim() === v) {
+          const btn = cell.querySelector('.field-filter-btn');
+          if (!btn) return false;
+          btn.click();
+          return true;
+        }
+      }
+      return false;
     }, value);
 
     const getQuery = async () => page.evaluate(() =>
