@@ -8,9 +8,14 @@ updates:
     labels:
       - "dependencies"
       - "release:patch"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     commit-message:
       prefix: "chore"
+    groups:
+      go-patch:
+        update-types: ["patch"]
+      go-minor:
+        update-types: ["minor"]
 
   - package-ecosystem: "npm"
     directory: "/"
@@ -19,10 +24,13 @@ updates:
       day: "monday"
     labels:
       - "dependencies"
-      - "release:patch"
-    open-pull-requests-limit: 5
+      - "skip-release"
+    open-pull-requests-limit: 2
     commit-message:
       prefix: "chore"
+    groups:
+      npm-all:
+        patterns: ["*"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -32,6 +40,9 @@ updates:
     labels:
       - "dependencies"
       - "skip-release"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
     commit-message:
       prefix: "chore"
+    groups:
+      actions-all:
+        patterns: ["*"]
