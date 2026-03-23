@@ -87,12 +87,15 @@ func (s *Server) Start(port int) error {
 	addr := fmt.Sprintf(":%d", port)
 	log.Printf("Starting server on http://localhost%s", addr)
 
-	s.httpServer = &http.Server{
+	httpSrv := &http.Server{
 		Addr:    addr,
 		Handler: mux,
 	}
+	s.mu.Lock()
+	s.httpServer = httpSrv
+	s.mu.Unlock()
 
-	if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return err
 	}
 	return nil
@@ -118,8 +121,11 @@ func (s *Server) Shutdown(ctx context.Context) {
 	s.mu.Unlock()
 
 	// Gracefully shut down the HTTP server
-	if s.httpServer != nil {
-		s.httpServer.Shutdown(ctx) //nolint:errcheck
+	s.mu.RLock()
+	httpSrv := s.httpServer
+	s.mu.RUnlock()
+	if httpSrv != nil {
+		httpSrv.Shutdown(ctx) //nolint:errcheck
 	}
 }
 
@@ -147,9 +153,9 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := map[string]interface{}{
-		"status":         "ok",
-		"logs_stored":    stats.TotalLogs,
-		"db_size_bytes":  int64(stats.DBSizeMB * 1024 * 1024),
+		"status":        "ok",
+		"logs_stored":   stats.TotalLogs,
+		"db_size_bytes": int64(stats.DBSizeMB * 1024 * 1024),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -165,9 +171,9 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := map[string]interface{}{
-		"total_logs":  stats.TotalLogs,
-		"db_size_mb":  stats.DBSizeMB,
-		"levels":      stats.Levels,
+		"total_logs": stats.TotalLogs,
+		"db_size_mb": stats.DBSizeMB,
+		"levels":     stats.Levels,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -250,7 +256,7 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	took := time.Since(executionStart)
-	
+
 	// Ensure entries is never nil for JSON encoding
 	if entries == nil {
 		entries = []*storage.LogEntry{}
