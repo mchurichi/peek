@@ -979,22 +979,27 @@
         .fields-grid .field-val {
             color: var(--peek-green);
             word-break: break-all;
-            cursor: pointer;
             font-family: var(--font-mono);
             font-size: var(--detail-font-size);
-            background: transparent;
-            border: none;
-            padding: 0;
-            text-align: left;
         }
-
-        .fields-grid .field-val:hover { text-decoration: underline; }
 
         .fields-grid .field-val.stack-trace {
             white-space: pre-wrap;
             color: rgba(239,68,68,0.8);
             font-size: 0.6875rem;
             line-height: 1.5;
+        }
+
+        .fields-grid .field-filter-btn,
+        .fields-grid .field-exclude-btn {
+            opacity: 0;
+            transition: opacity 0.15s;
+            flex-shrink: 0;
+        }
+
+        .fields-grid .field-val-cell:hover .field-filter-btn,
+        .fields-grid .field-val-cell:hover .field-exclude-btn {
+            opacity: 1;
         }
 
         .fields-grid .field-copy-btn {
@@ -1180,6 +1185,8 @@
             densityDefault: '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="1.5" rx="0.75" fill="currentColor"/><rect x="1" y="6" width="12" height="1.5" rx="0.75" fill="currentColor"/><rect x="1" y="10" width="12" height="1.5" rx="0.75" fill="currentColor"/></svg>',
             densityComfortable: '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1.5" width="12" height="2" rx="1" fill="currentColor"/><rect x="1" y="6" width="12" height="2" rx="1" fill="currentColor"/><rect x="1" y="10.5" width="12" height="2" rx="1" fill="currentColor"/></svg>',
             helpCircle: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>',
+            plus: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
+            minus: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></svg>',
         }
 
         function icon(name, cls) {
@@ -1600,6 +1607,26 @@
                 // Do NOT focus the input — avoids triggering autocomplete and browser scroll-to-focus
             }
             // Preserve scroll across the query rebuild
+            if (logContainerEl) {
+                window.scrollPreserveValue = logContainerEl.scrollTop
+                globalScrollPreserve = logContainerEl.scrollTop
+            }
+            executeQuery()
+        }
+
+        function excludeByField(field, value) {
+            const escaped = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+            const token = `AND NOT ${field}:"${escaped}"`
+            if (queryInputEl) {
+                const cur = queryInputEl.value.trim()
+                if (!cur || cur === '*') {
+                    queryInputEl.value = `NOT ${field}:"${escaped}"`
+                } else {
+                    queryInputEl.value = cur + ' ' + token
+                }
+                liveQuery.val = queryInputEl.value
+                updateHighlightGlobal()
+            }
             if (logContainerEl) {
                 window.scrollPreserveValue = logContainerEl.scrollTop
                 globalScrollPreserve = logContainerEl.scrollTop
@@ -2610,11 +2637,24 @@
                 // Value cell
                 const valCell = document.createElement('div')
                 valCell.className = 'field-val-cell'
-                const valEl = document.createElement('button')
+                const valEl = document.createElement('span')
                 valEl.className = 'field-val' + (isStack ? ' stack-trace' : '')
                 valEl.textContent = String(v)
-                valEl.title = `Filter by ${k}:${v}`
                 valEl.addEventListener('click', e => { e.stopPropagation(); filterByField(k, String(v)) })
+                const filterBtn = document.createElement('button')
+                filterBtn.className = 'copy-btn field-filter-btn'
+                filterBtn.title = `Filter by ${k}:${v}`
+                filterBtn.innerHTML = ICONS.plus
+                filterBtn.style.display = 'inline-flex'
+                filterBtn.style.alignItems = 'center'
+                filterBtn.addEventListener('click', e => { e.stopPropagation(); filterByField(k, String(v)) })
+                const excludeBtn = document.createElement('button')
+                excludeBtn.className = 'copy-btn field-exclude-btn'
+                excludeBtn.title = `Exclude ${k}:${v}`
+                excludeBtn.innerHTML = ICONS.minus
+                excludeBtn.style.display = 'inline-flex'
+                excludeBtn.style.alignItems = 'center'
+                excludeBtn.addEventListener('click', e => { e.stopPropagation(); excludeByField(k, String(v)) })
                 const copyBtn = document.createElement('button')
                 copyBtn.className = 'copy-btn field-copy-btn'
                 copyBtn.title = 'Copy value'
@@ -2623,6 +2663,8 @@
                 copyBtn.style.alignItems = 'center'
                 copyBtn.addEventListener('click', e => { e.stopPropagation(); copyToClipboard(String(v), 'Copied value') })
                 valCell.appendChild(valEl)
+                valCell.appendChild(filterBtn)
+                valCell.appendChild(excludeBtn)
                 valCell.appendChild(copyBtn)
                 grid.appendChild(valCell)
             }
@@ -2875,7 +2917,7 @@
                 if (logContainerEl && pinnedChanged && !newLogsAdded) {
                     preserveScroll = window.scrollPreserveValue > 0 ? window.scrollPreserveValue : logContainerEl.scrollTop
                     window.scrollPreserveValue = 0  // Reset after use
-                } else if (logContainerEl && logsChanged && !pinnedChanged && !autoScroll.val) {
+                } else if (logContainerEl && logsChanged && !pinnedChanged && (!autoScroll.val || window.scrollPreserveValue > 0)) {
                     preserveScroll = window.scrollPreserveValue > 0 ? window.scrollPreserveValue : logContainerEl.scrollTop
                     window.scrollPreserveValue = 0  // Reset after use
                 }
@@ -2924,7 +2966,7 @@
                     expandedIds.clear()
 
                     // Restore scroll position if only columns changed (not new logs)
-                    if (((pinnedChanged && !newLogsAdded) || (logsChanged && !pinnedChanged && !autoScroll.val)) && preserveScroll > 0 && logContainerEl) {
+                    if (((pinnedChanged && !newLogsAdded) || (logsChanged && !pinnedChanged && (!autoScroll.val || preserveScroll > 0))) && preserveScroll > 0 && logContainerEl) {
                         setTimeout(() => {
                             if (logContainerEl) {
                                 logContainerEl.scrollTop = preserveScroll

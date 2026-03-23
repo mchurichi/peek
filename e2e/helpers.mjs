@@ -17,6 +17,7 @@ const POLL_INTERVAL_MS = 1_000;
 const FILE_PORT_OFFSETS = Object.freeze({
   'copy.spec.mjs': 8,
   'datetime.spec.mjs': 0,
+  'field-exclude-button.spec.mjs': 11,
   'field-filter-append.spec.mjs': 1,
   'levelless.spec.mjs': 2,
   'lucene-query.spec.mjs': 10,

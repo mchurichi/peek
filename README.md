@@ -308,6 +308,10 @@ level:ERROR AND service:auth   # Combine filters
 message:*timeout*              # Wildcard search
 ```
 
+Expand any log row to see its parsed fields. Click a field value to add it as a
+filter (`AND field:"value"`). Hover over a field value and click the **−** button
+to exclude it (`AND NOT field:"value"`).
+
 ## Development
 
 ### Requirements
