@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -525,7 +526,11 @@ func runCollectMode(cfg *config.Config, showAll bool) error {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	<-sigChan
+	signal.Stop(sigChan)
 	log.Println("Shutting down...")
+	shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	srv.Shutdown(shutCtx)
 	return nil
 }
 
@@ -570,7 +575,11 @@ func runServerMode(cfg *config.Config) error {
 	// Wait for shutdown signal or error
 	select {
 	case <-sigChan:
+		signal.Stop(sigChan)
 		log.Println("Shutting down gracefully...")
+		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		srv.Shutdown(shutCtx)
 		return nil
 	case err := <-errChan:
 		return err

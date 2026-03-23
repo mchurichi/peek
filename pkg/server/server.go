@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -27,6 +28,8 @@ type Server struct {
 	clients       map[*websocket.Conn]*client
 	mu            sync.RWMutex
 	defaultFilter query.Filter // Default filter applied to all queries (e.g., for fresh mode)
+	httpServer    *http.Server
+	stopBroadcast chan struct{}
 }
 
 type client struct {
@@ -49,7 +52,8 @@ func NewServer(storage *storage.BadgerStorage, startTime *time.Time) *Server {
 				return true // Allow all origins for local dev
 			},
 		},
-		clients: make(map[*websocket.Conn]*client),
+		clients:       make(map[*websocket.Conn]*client),
+		stopBroadcast: make(chan struct{}),
 	}
 
 	// If startTime is provided, create a default filter for fresh mode
@@ -83,7 +87,46 @@ func (s *Server) Start(port int) error {
 	addr := fmt.Sprintf(":%d", port)
 	log.Printf("Starting server on http://localhost%s", addr)
 
-	return http.ListenAndServe(addr, mux)
+	httpSrv := &http.Server{
+		Addr:    addr,
+		Handler: mux,
+	}
+	s.mu.Lock()
+	s.httpServer = httpSrv
+	s.mu.Unlock()
+
+	if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		return err
+	}
+	return nil
+}
+
+// Shutdown gracefully stops the broadcast worker, closes WebSocket connections,
+// and shuts down the HTTP server. Must be called before closing the storage.
+func (s *Server) Shutdown(ctx context.Context) {
+	// Stop broadcast worker so it no longer accesses storage
+	select {
+	case <-s.stopBroadcast:
+	default:
+		close(s.stopBroadcast)
+	}
+
+	// Close all active WebSocket connections so their goroutines exit
+	s.mu.Lock()
+	for conn := range s.clients {
+		conn.WriteMessage(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+		conn.Close()
+	}
+	s.mu.Unlock()
+
+	// Gracefully shut down the HTTP server
+	s.mu.RLock()
+	httpSrv := s.httpServer
+	s.mu.RUnlock()
+	if httpSrv != nil {
+		httpSrv.Shutdown(ctx) //nolint:errcheck
+	}
 }
 
 // handleVanJS serves the bundled VanJS library
@@ -110,9 +153,9 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := map[string]interface{}{
-		"status":         "ok",
-		"logs_stored":    stats.TotalLogs,
-		"db_size_bytes":  int64(stats.DBSizeMB * 1024 * 1024),
+		"status":        "ok",
+		"logs_stored":   stats.TotalLogs,
+		"db_size_bytes": int64(stats.DBSizeMB * 1024 * 1024),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -128,9 +171,9 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := map[string]interface{}{
-		"total_logs":  stats.TotalLogs,
-		"db_size_mb":  stats.DBSizeMB,
-		"levels":      stats.Levels,
+		"total_logs": stats.TotalLogs,
+		"db_size_mb": stats.DBSizeMB,
+		"levels":     stats.Levels,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -213,7 +256,7 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	took := time.Since(executionStart)
-	
+
 	// Ensure entries is never nil for JSON encoding
 	if entries == nil {
 		entries = []*storage.LogEntry{}
@@ -450,24 +493,29 @@ func (s *Server) StartBroadcastWorker() {
 
 		lastCheck := time.Now()
 
-		for range ticker.C {
-			now := time.Now()
+		for {
+			select {
+			case <-s.stopBroadcast:
+				return
+			case <-ticker.C:
+				now := time.Now()
 
-			// Query for new entries since last check
-			entries := make([]*storage.LogEntry, 0, 100)
-			s.storage.Scan(func(entry *storage.LogEntry) error {
-				if entry.Timestamp.After(lastCheck) {
-					entries = append(entries, entry)
+				// Query for new entries since last check
+				entries := make([]*storage.LogEntry, 0, 100)
+				s.storage.Scan(func(entry *storage.LogEntry) error {
+					if entry.Timestamp.After(lastCheck) {
+						entries = append(entries, entry)
+					}
+					return nil
+				})
+
+				// Broadcast new entries
+				for _, entry := range entries {
+					s.BroadcastLog(entry)
 				}
-				return nil
-			})
 
-			// Broadcast new entries
-			for _, entry := range entries {
-				s.BroadcastLog(entry)
+				lastCheck = now
 			}
-
-			lastCheck = now
 		}
 	}()
 }
