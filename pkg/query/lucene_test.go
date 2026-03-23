@@ -1,6 +1,7 @@
 package query
 
 import (
+	"regexp"
 	"testing"
 	"time"
 
@@ -23,6 +24,15 @@ func TestParse(t *testing.T) {
 		{"complex query", "(level:ERROR OR level:WARN) AND service:api", false},
 		{"wildcard field", "message:*timeout*", false},
 		{"quoted string", `message:"connection refused"`, false},
+		{"existence query", "request_id:*", false},
+		{"regex query", `service:/^api-gateway$/`, false},
+		{"regex with alternation", `service:/^api-(gateway|edge)$/`, false},
+		{"required prefix", "+level:ERROR", false},
+		{"prohibited prefix", "-level:DEBUG", false},
+		{"boost syntax", "error^2", false},
+		{"field boost syntax", "level:ERROR^3", false},
+		{"question mark wildcard", "service:api-?", false},
+		{"bare quoted phrase", `"connection refused"`, false},
 		{"dangling closing parenthesis", `level:ERROR)`, true},
 		{"extra closing parenthesis after group", `(level:ERROR))`, true},
 		{"implicit AND with trailing keyword", `level:ERROR foo`, false},
@@ -656,5 +666,534 @@ func TestAllFilter(t *testing.T) {
 
 	if !filter.Match(entry) {
 		t.Error("AllFilter should match all entries")
+	}
+}
+
+func TestExistenceFilter(t *testing.T) {
+	tests := []struct {
+		name   string
+		filter *ExistenceFilter
+		entry  *storage.LogEntry
+		want   bool
+	}{
+		{
+			name:   "field present in Fields map",
+			filter: &ExistenceFilter{Field: "request_id"},
+			entry:  &storage.LogEntry{Level: "INFO", Message: "test", Fields: map[string]interface{}{"request_id": "req-001"}},
+			want:   true,
+		},
+		{
+			name:   "field absent from Fields map",
+			filter: &ExistenceFilter{Field: "request_id"},
+			entry:  &storage.LogEntry{Level: "INFO", Message: "test", Fields: map[string]interface{}{}},
+			want:   false,
+		},
+		{
+			name:   "level field present (non-empty)",
+			filter: &ExistenceFilter{Field: "level"},
+			entry:  &storage.LogEntry{Level: "ERROR", Message: "test", Fields: map[string]interface{}{}},
+			want:   true,
+		},
+		{
+			name:   "level field absent (empty)",
+			filter: &ExistenceFilter{Field: "level"},
+			entry:  &storage.LogEntry{Level: "", Message: "test", Fields: map[string]interface{}{}},
+			want:   false,
+		},
+		{
+			name:   "message field present (non-empty)",
+			filter: &ExistenceFilter{Field: "message"},
+			entry:  &storage.LogEntry{Level: "INFO", Message: "hello", Fields: map[string]interface{}{}},
+			want:   true,
+		},
+		{
+			name:   "message field absent (empty)",
+			filter: &ExistenceFilter{Field: "message"},
+			entry:  &storage.LogEntry{Level: "INFO", Message: "", Fields: map[string]interface{}{}},
+			want:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.filter.Match(tt.entry); got != tt.want {
+				t.Errorf("ExistenceFilter.Match() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRegexFilter(t *testing.T) {
+	tests := []struct {
+		name   string
+		filter *RegexFilter
+		entry  *storage.LogEntry
+		want   bool
+	}{
+		{
+			name:   "regex matches service field",
+			filter: &RegexFilter{Field: "service", Regex: regexp.MustCompile(`^api-(gateway|edge)$`)},
+			entry:  &storage.LogEntry{Level: "INFO", Message: "test", Fields: map[string]interface{}{"service": "api-gateway"}},
+			want:   true,
+		},
+		{
+			name:   "regex no match on service",
+			filter: &RegexFilter{Field: "service", Regex: regexp.MustCompile(`^api-(gateway|edge)$`)},
+			entry:  &storage.LogEntry{Level: "INFO", Message: "test", Fields: map[string]interface{}{"service": "auth-service"}},
+			want:   false,
+		},
+		{
+			name:   "regex matches level field",
+			filter: &RegexFilter{Field: "level", Regex: regexp.MustCompile(`^(ERROR|WARN)$`)},
+			entry:  &storage.LogEntry{Level: "ERROR", Message: "test", Fields: map[string]interface{}{}},
+			want:   true,
+		},
+		{
+			name:   "regex missing field returns false",
+			filter: &RegexFilter{Field: "missing", Regex: regexp.MustCompile(`.*`)},
+			entry:  &storage.LogEntry{Level: "INFO", Message: "test", Fields: map[string]interface{}{}},
+			want:   false,
+		},
+		{
+			name:   "regex matches message field",
+			filter: &RegexFilter{Field: "message", Regex: regexp.MustCompile(`timeout`)},
+			entry:  &storage.LogEntry{Level: "ERROR", Message: "connection timeout", Fields: map[string]interface{}{}},
+			want:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.filter.Match(tt.entry); got != tt.want {
+				t.Errorf("RegexFilter.Match() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParsePrefixOperators(t *testing.T) {
+	tests := []struct {
+		name  string
+		query string
+		entry *storage.LogEntry
+		want  bool
+	}{
+		{
+			name:  "+ required prefix matches",
+			query: "+level:ERROR",
+			entry: &storage.LogEntry{Level: "ERROR", Message: "test", Fields: map[string]interface{}{}},
+			want:  true,
+		},
+		{
+			name:  "+ required prefix no match",
+			query: "+level:ERROR",
+			entry: &storage.LogEntry{Level: "INFO", Message: "test", Fields: map[string]interface{}{}},
+			want:  false,
+		},
+		{
+			name:  "- prohibited prefix excludes matching entry",
+			query: "-level:DEBUG",
+			entry: &storage.LogEntry{Level: "DEBUG", Message: "test", Fields: map[string]interface{}{}},
+			want:  false,
+		},
+		{
+			name:  "- prohibited prefix passes non-matching entry",
+			query: "-level:DEBUG",
+			entry: &storage.LogEntry{Level: "ERROR", Message: "test", Fields: map[string]interface{}{}},
+			want:  true,
+		},
+		{
+			name:  "+required -prohibited combined",
+			query: "+level:ERROR -service:auth",
+			entry: &storage.LogEntry{Level: "ERROR", Message: "test", Fields: map[string]interface{}{"service": "api"}},
+			want:  true,
+		},
+		{
+			name:  "+required -prohibited excludes prohibited service",
+			query: "+level:ERROR -service:auth",
+			entry: &storage.LogEntry{Level: "ERROR", Message: "test", Fields: map[string]interface{}{"service": "auth"}},
+			want:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			q, err := Parse(tt.query)
+			if err != nil {
+				t.Fatalf("Parse() error = %v", err)
+			}
+			if got := q.Match(tt.entry); got != tt.want {
+				t.Errorf("Query.Match() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseRegexQuery(t *testing.T) {
+	tests := []struct {
+		name  string
+		query string
+		entry *storage.LogEntry
+		want  bool
+	}{
+		{
+			name:  "simple regex matches",
+			query: `service:/^api-gateway$/`,
+			entry: &storage.LogEntry{Level: "INFO", Message: "test", Fields: map[string]interface{}{"service": "api-gateway"}},
+			want:  true,
+		},
+		{
+			name:  "simple regex no match",
+			query: `service:/^api-gateway$/`,
+			entry: &storage.LogEntry{Level: "INFO", Message: "test", Fields: map[string]interface{}{"service": "auth-service"}},
+			want:  false,
+		},
+		{
+			name:  "regex with alternation",
+			query: `service:/^api-(gateway|edge)$/`,
+			entry: &storage.LogEntry{Level: "INFO", Message: "test", Fields: map[string]interface{}{"service": "api-edge"}},
+			want:  true,
+		},
+		{
+			name:  "regex alternation no match",
+			query: `service:/^api-(gateway|edge)$/`,
+			entry: &storage.LogEntry{Level: "INFO", Message: "test", Fields: map[string]interface{}{"service": "api-other"}},
+			want:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			q, err := Parse(tt.query)
+			if err != nil {
+				t.Fatalf("Parse(%q) error = %v", tt.query, err)
+			}
+			if got := q.Match(tt.entry); got != tt.want {
+				t.Errorf("Query.Match() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseExistenceQuery(t *testing.T) {
+	tests := []struct {
+		name  string
+		query string
+		entry *storage.LogEntry
+		want  bool
+	}{
+		{
+			name:  "field:* matches when field present",
+			query: "request_id:*",
+			entry: &storage.LogEntry{Level: "INFO", Message: "test", Fields: map[string]interface{}{"request_id": "req-001"}},
+			want:  true,
+		},
+		{
+			name:  "field:* no match when field absent",
+			query: "request_id:*",
+			entry: &storage.LogEntry{Level: "INFO", Message: "test", Fields: map[string]interface{}{}},
+			want:  false,
+		},
+		{
+			name:  "level:* matches when level set",
+			query: "level:*",
+			entry: &storage.LogEntry{Level: "ERROR", Message: "test", Fields: map[string]interface{}{}},
+			want:  true,
+		},
+		{
+			name:  "level:* no match when level empty",
+			query: "level:*",
+			entry: &storage.LogEntry{Level: "", Message: "test", Fields: map[string]interface{}{}},
+			want:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			q, err := Parse(tt.query)
+			if err != nil {
+				t.Fatalf("Parse(%q) error = %v", tt.query, err)
+			}
+			if got := q.Match(tt.entry); got != tt.want {
+				t.Errorf("Query.Match() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseBoostSyntax(t *testing.T) {
+	tests := []struct {
+		name  string
+		query string
+		entry *storage.LogEntry
+		want  bool
+	}{
+		{
+			name:  "keyword with boost still matches",
+			query: "timeout^2",
+			entry: &storage.LogEntry{Level: "ERROR", Message: "connection timeout", Fields: map[string]interface{}{}},
+			want:  true,
+		},
+		{
+			name:  "field value with boost still matches",
+			query: "level:ERROR^3",
+			entry: &storage.LogEntry{Level: "ERROR", Message: "test", Fields: map[string]interface{}{}},
+			want:  true,
+		},
+		{
+			name:  "boost accepted - non matching entry still excluded",
+			query: "level:ERROR^3",
+			entry: &storage.LogEntry{Level: "INFO", Message: "test", Fields: map[string]interface{}{}},
+			want:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			q, err := Parse(tt.query)
+			if err != nil {
+				t.Fatalf("Parse(%q) error = %v", tt.query, err)
+			}
+			if got := q.Match(tt.entry); got != tt.want {
+				t.Errorf("Query.Match() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseQuotedPhraseKeyword(t *testing.T) {
+	tests := []struct {
+		name  string
+		query string
+		entry *storage.LogEntry
+		want  bool
+	}{
+		{
+			name:  "bare quoted phrase matches in message",
+			query: `"connection refused"`,
+			entry: &storage.LogEntry{Level: "ERROR", Message: "connection refused", Fields: map[string]interface{}{}},
+			want:  true,
+		},
+		{
+			name:  "bare quoted phrase substring match",
+			query: `"connection"`,
+			entry: &storage.LogEntry{Level: "ERROR", Message: "connection timeout", Fields: map[string]interface{}{}},
+			want:  true,
+		},
+		{
+			name:  "bare quoted phrase no match",
+			query: `"connection refused"`,
+			entry: &storage.LogEntry{Level: "ERROR", Message: "all good", Fields: map[string]interface{}{}},
+			want:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			q, err := Parse(tt.query)
+			if err != nil {
+				t.Fatalf("Parse(%q) error = %v", tt.query, err)
+			}
+			if got := q.Match(tt.entry); got != tt.want {
+				t.Errorf("Query.Match() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestWildcardFilterQuestionMark(t *testing.T) {
+	tests := []struct {
+		name   string
+		filter *WildcardFilter
+		entry  *storage.LogEntry
+		want   bool
+	}{
+		{
+			name:   "? matches single char",
+			filter: &WildcardFilter{Field: "service", Pattern: "api-????way"},
+			entry:  &storage.LogEntry{Level: "INFO", Message: "test", Fields: map[string]interface{}{"service": "api-gateway"}},
+			want:   true,
+		},
+		{
+			name:   "? no match when extra chars",
+			filter: &WildcardFilter{Field: "service", Pattern: "api-?"},
+			entry:  &storage.LogEntry{Level: "INFO", Message: "test", Fields: map[string]interface{}{"service": "api-gateway"}},
+			want:   false,
+		},
+		{
+			name:   "? combined with * wildcard",
+			filter: &WildcardFilter{Field: "service", Pattern: "api-?*"},
+			entry:  &storage.LogEntry{Level: "INFO", Message: "test", Fields: map[string]interface{}{"service": "api-gateway"}},
+			want:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.filter.Match(tt.entry); got != tt.want {
+				t.Errorf("WildcardFilter.Match() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestLowercaseBooleanOperators(t *testing.T) {
+	entry := &storage.LogEntry{
+		Level:   "ERROR",
+		Message: "connection timeout",
+		Fields:  map[string]interface{}{"service": "api"},
+	}
+
+	tests := []struct {
+		name  string
+		query string
+		want  bool
+	}{
+		{"lowercase and", "level:ERROR and service:api", true},
+		{"lowercase or", "level:INFO or service:api", true},
+		{"lowercase not", "not level:INFO", true},
+		{"lowercase or no match", "level:INFO or service:web", false},
+		{"uppercase AND still works", "level:ERROR AND service:api", true},
+		{"mixed case", "level:ERROR and NOT service:web", true},
+		// word-boundary: 'android' must not be split on 'and'
+		{"android keyword not split", "android", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			q, err := Parse(tt.query)
+			if err != nil {
+				t.Fatalf("Parse(%q) error = %v", tt.query, err)
+			}
+			if got := q.Match(entry); got != tt.want {
+				t.Errorf("Match() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNumericComparisonFilter(t *testing.T) {
+	entry := &storage.LogEntry{
+		Level:   "INFO",
+		Message: "ok",
+		Fields:  map[string]interface{}{"status": 503, "latency": "45.5"},
+	}
+
+	tests := []struct {
+		name   string
+		filter *NumericComparisonFilter
+		want   bool
+	}{
+		{"gt match", &NumericComparisonFilter{Field: "status", Op: ">", Value: 500}, true},
+		{"gt no match", &NumericComparisonFilter{Field: "status", Op: ">", Value: 503}, false},
+		{"gte match boundary", &NumericComparisonFilter{Field: "status", Op: ">=", Value: 503}, true},
+		{"gte no match", &NumericComparisonFilter{Field: "status", Op: ">=", Value: 504}, false},
+		{"lt match", &NumericComparisonFilter{Field: "status", Op: "<", Value: 600}, true},
+		{"lt no match", &NumericComparisonFilter{Field: "status", Op: "<", Value: 503}, false},
+		{"lte match boundary", &NumericComparisonFilter{Field: "status", Op: "<=", Value: 503}, true},
+		{"string numeric field", &NumericComparisonFilter{Field: "latency", Op: ">", Value: 40}, true},
+		{"missing field", &NumericComparisonFilter{Field: "missing", Op: ">", Value: 0}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.filter.Match(entry); got != tt.want {
+				t.Errorf("NumericComparisonFilter.Match() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTimestampComparisonFilter(t *testing.T) {
+	pivot := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+	before := pivot.Add(-time.Hour)
+	after := pivot.Add(time.Hour)
+
+	tests := []struct {
+		name   string
+		filter *TimestampComparisonFilter
+		ts     time.Time
+		want   bool
+	}{
+		{"gt after", &TimestampComparisonFilter{Op: ">", Value: pivot}, after, true},
+		{"gt before", &TimestampComparisonFilter{Op: ">", Value: pivot}, before, false},
+		{"gt at boundary", &TimestampComparisonFilter{Op: ">", Value: pivot}, pivot, false},
+		{"gte at boundary", &TimestampComparisonFilter{Op: ">=", Value: pivot}, pivot, true},
+		{"lt before", &TimestampComparisonFilter{Op: "<", Value: pivot}, before, true},
+		{"lt at boundary", &TimestampComparisonFilter{Op: "<", Value: pivot}, pivot, false},
+		{"lte at boundary", &TimestampComparisonFilter{Op: "<=", Value: pivot}, pivot, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			entry := &storage.LogEntry{Timestamp: tt.ts}
+			if got := tt.filter.Match(entry); got != tt.want {
+				t.Errorf("TimestampComparisonFilter.Match() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestComparisonOperatorParsing(t *testing.T) {
+	tests := []struct {
+		name    string
+		query   string
+		entry   *storage.LogEntry
+		want    bool
+		wantErr bool
+	}{
+		{
+			name:  "numeric gt match",
+			query: "status > 499",
+			entry: &storage.LogEntry{Level: "ERROR", Message: "err", Fields: map[string]interface{}{"status": 503}},
+			want:  true,
+		},
+		{
+			name:  "numeric gt no match",
+			query: "status > 503",
+			entry: &storage.LogEntry{Level: "ERROR", Message: "err", Fields: map[string]interface{}{"status": 503}},
+			want:  false,
+		},
+		{
+			name:  "nospace gte",
+			query: "status>=503",
+			entry: &storage.LogEntry{Level: "ERROR", Message: "err", Fields: map[string]interface{}{"status": 503}},
+			want:  true,
+		},
+		{
+			name:  "numeric lt match",
+			query: "latency < 100",
+			entry: &storage.LogEntry{Level: "INFO", Message: "ok", Fields: map[string]interface{}{"latency": 50}},
+			want:  true,
+		},
+		{
+			name:  "comparison with lowercase and",
+			query: "status >= 500 and level:ERROR",
+			entry: &storage.LogEntry{Level: "ERROR", Message: "err", Fields: map[string]interface{}{"status": 503}},
+			want:  true,
+		},
+		{
+			name:    "invalid numeric value",
+			query:   "status > notanumber",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			q, err := Parse(tt.query)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("Parse(%q) expected error", tt.query)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Parse(%q) error = %v", tt.query, err)
+			}
+			if got := q.Match(tt.entry); got != tt.want {
+				t.Errorf("Match() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

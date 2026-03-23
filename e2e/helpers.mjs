@@ -19,6 +19,7 @@ const FILE_PORT_OFFSETS = Object.freeze({
   'datetime.spec.mjs': 0,
   'field-filter-append.spec.mjs': 1,
   'levelless.spec.mjs': 2,
+  'lucene-query.spec.mjs': 10,
   'resize.spec.mjs': 3,
   'search-caret.spec.mjs': 4,
   'search.spec.mjs': 5,

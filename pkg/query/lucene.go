@@ -72,7 +72,7 @@ func (p *parser) parseOr() (Filter, error) {
 
 	for {
 		p.skipWhitespace()
-		if p.peek("OR") {
+		if p.peekOp("OR") {
 			p.consume(2)
 			p.skipWhitespace()
 			right, err := p.parseAnd()
@@ -96,7 +96,7 @@ func (p *parser) parseAnd() (Filter, error) {
 
 	for {
 		p.skipWhitespace()
-		if p.peek("AND") {
+		if p.peekOp("AND") {
 			p.consume(3)
 			p.skipWhitespace()
 			right, err := p.parseNot()
@@ -104,7 +104,7 @@ func (p *parser) parseAnd() (Filter, error) {
 				return nil, err
 			}
 			left = &AndFilter{Left: left, Right: right}
-		} else if p.pos < len(p.input) && !p.peek("OR") && !p.peek(")") {
+		} else if p.pos < len(p.input) && !p.peekOp("OR") && !p.peek(")") {
 			// Implicit AND
 			right, err := p.parseNot()
 			if err != nil {
@@ -121,7 +121,7 @@ func (p *parser) parseAnd() (Filter, error) {
 
 func (p *parser) parseNot() (Filter, error) {
 	p.skipWhitespace()
-	if p.peek("NOT") {
+	if p.peekOp("NOT") {
 		p.consume(3)
 		p.skipWhitespace()
 		filter, err := p.parsePrimary()
@@ -151,6 +151,22 @@ func (p *parser) parsePrimary() (Filter, error) {
 		return filter, nil
 	}
 
+	// Handle required (+) prefix — Lucene semantics: clause is required (same as default AND).
+	if p.peekChar('+') {
+		p.consume(1)
+		return p.parsePrimary()
+	}
+
+	// Handle prohibited (-) prefix — Lucene semantics: clause must NOT match.
+	if p.peekChar('-') {
+		p.consume(1)
+		filter, err := p.parsePrimary()
+		if err != nil {
+			return nil, err
+		}
+		return &NotFilter{Filter: filter}, nil
+	}
+
 	// Parse field:value or keyword
 	token := p.readToken()
 	if token == "" {
@@ -168,22 +184,103 @@ func (p *parser) parsePrimary() (Filter, error) {
 			return p.parseRange(field, value)
 		}
 
-		// Handle quoted strings
+		// Strip boost suffix before other value checks so "foo"^2 parses correctly
+		value = stripBoost(value)
+
+		// Handle quoted strings (phrase match)
 		if strings.HasPrefix(value, "\"") {
 			value = strings.Trim(value, "\"")
 			return &FieldFilter{Field: field, Value: value, Exact: true}, nil
 		}
 
-		// Handle wildcards
-		if strings.Contains(value, "*") {
-			return &WildcardFilter{Field: field, Pattern: value}, nil
+		// Handle regex values: field:/regex/
+		if strings.HasPrefix(value, "/") {
+			regexStr := p.extractRegex(value)
+			re, err := regexp.Compile(regexStr)
+			if err != nil {
+				return nil, fmt.Errorf("invalid regex: %w", err)
+			}
+			return &RegexFilter{Field: field, Regex: re}, nil
+		}
+
+		// Handle existence: field:*
+		if value == "*" {
+			return &ExistenceFilter{Field: field}, nil
+		}
+
+		// Handle wildcards (* and ?)
+		if strings.ContainsAny(value, "*?") {
+			re, err := compileWildcard(value)
+			if err != nil {
+				return nil, fmt.Errorf("invalid wildcard pattern %q: %w", value, err)
+			}
+			return &WildcardFilter{Field: field, Pattern: value, re: re}, nil
 		}
 
 		return &FieldFilter{Field: field, Value: value, Exact: false}, nil
 	}
 
+	// Strip boost from bare keyword
+	token = stripBoost(token)
+	if token == "" {
+		return &AllFilter{}, nil
+	}
+
+	// Bare quoted phrase — search message and fields for the phrase
+	if len(token) >= 2 && token[0] == '"' && token[len(token)-1] == '"' {
+		return &KeywordFilter{Keyword: token[1 : len(token)-1]}, nil
+	}
+
+	// Check for comparison operator: field > value, field >= value, etc.
+	savedPos := p.pos
+	p.skipWhitespace()
+	if op := p.readComparisonOp(); op != "" {
+		p.skipWhitespace()
+		valToken := p.readToken()
+		if valToken == "" {
+			return nil, fmt.Errorf("expected value after '%s'", op)
+		}
+		return p.makeComparisonFilter(token, op, valToken)
+	}
+	p.pos = savedPos
+
 	// Keyword search (searches message and fields)
 	return &KeywordFilter{Keyword: token}, nil
+}
+
+// extractRegex extracts the regex string from a value that starts with "/".
+// If the value already ends with "/" (complete token), the content between
+// the slashes is returned. Otherwise, additional characters are consumed
+// from the parser input until the closing "/" is found — this handles regex
+// patterns that were cut short by "(" or ")" in the token reader.
+func (p *parser) extractRegex(value string) string {
+	// Complete regex already captured (e.g. "/regex/")
+	if len(value) >= 2 && value[len(value)-1] == '/' {
+		return value[1 : len(value)-1]
+	}
+	// Partial — strip leading "/" and continue reading until closing "/"
+	regexStr := value[1:]
+	for p.pos < len(p.input) {
+		ch := p.input[p.pos]
+		if ch == '/' {
+			p.pos++ // consume closing /
+			break
+		}
+		regexStr += string(ch)
+		p.pos++
+	}
+	return regexStr
+}
+
+// stripBoost removes a trailing "^number" boosting suffix from a token.
+// Boosting is accepted for query-string compatibility but ignored for filtering.
+func stripBoost(s string) string {
+	if idx := strings.LastIndex(s, "^"); idx > 0 {
+		if _, err := strconv.ParseFloat(s[idx+1:], 64); err == nil {
+			return s[:idx]
+		}
+	}
+	return s
 }
 
 func (p *parser) parseRange(field, rangeStr string) (Filter, error) {
@@ -305,10 +402,23 @@ func (p *parser) readToken() string {
 		return p.input[start:p.pos]
 	}
 
-	// Read until whitespace or special char
+	// Read until whitespace or special char.
+	// When :/regex/ is detected the regex body is consumed verbatim so that
+	// characters like ( ) > < inside the pattern don't end the token early.
 	for p.pos < len(p.input) {
 		ch := p.input[p.pos]
-		if ch == ' ' || ch == '(' || ch == ')' {
+		if ch == ':' && p.pos+1 < len(p.input) && p.input[p.pos+1] == '/' {
+			// field:/regex/ — consume ':' and the slash-delimited pattern
+			p.pos += 2 // consume ':' and opening '/'
+			for p.pos < len(p.input) && p.input[p.pos] != '/' {
+				p.pos++
+			}
+			if p.pos < len(p.input) {
+				p.pos++ // consume closing '/'
+			}
+			break
+		}
+		if ch == ' ' || ch == '(' || ch == ')' || ch == '>' || ch == '<' {
 			break
 		}
 		p.pos++
@@ -328,6 +438,65 @@ func (p *parser) peek(str string) bool {
 		return false
 	}
 	return p.input[p.pos:p.pos+len(str)] == str
+}
+
+// peekOp checks for a boolean operator keyword (AND/OR/NOT) case-insensitively,
+// ensuring it is followed by whitespace, '(', or end-of-input (word boundary).
+func (p *parser) peekOp(op string) bool {
+	n := len(op)
+	if p.pos+n > len(p.input) {
+		return false
+	}
+	if strings.ToUpper(p.input[p.pos:p.pos+n]) != op {
+		return false
+	}
+	end := p.pos + n
+	if end >= len(p.input) {
+		return true
+	}
+	ch := p.input[end]
+	return ch == ' ' || ch == '('
+}
+
+// readComparisonOp consumes and returns a comparison operator (>=, <=, >, <)
+// at the current position, or returns "" if none is present.
+func (p *parser) readComparisonOp() string {
+	if p.pos+1 < len(p.input) {
+		two := p.input[p.pos : p.pos+2]
+		if two == ">=" || two == "<=" {
+			p.pos += 2
+			return two
+		}
+	}
+	if p.pos < len(p.input) {
+		ch := p.input[p.pos]
+		if ch == '>' || ch == '<' {
+			p.pos++
+			return string(ch)
+		}
+	}
+	return ""
+}
+
+// makeComparisonFilter builds a comparison filter for field op value.
+// For "timestamp" the value is parsed as a time; otherwise as a float.
+func (p *parser) makeComparisonFilter(field, op, val string) (Filter, error) {
+	// Strip surrounding quotes if present
+	if len(val) >= 2 && val[0] == '"' && val[len(val)-1] == '"' {
+		val = val[1 : len(val)-1]
+	}
+	if field == "timestamp" {
+		t := p.parseTimeValue(val)
+		if t.IsZero() {
+			return nil, fmt.Errorf("invalid timestamp value %q", val)
+		}
+		return &TimestampComparisonFilter{Op: op, Value: t}, nil
+	}
+	n, err := strconv.ParseFloat(val, 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid numeric value %q for comparison operator '%s'", val, op)
+	}
+	return &NumericComparisonFilter{Field: field, Op: op, Value: n}, nil
 }
 
 func (p *parser) peekChar(ch byte) bool {
@@ -433,10 +602,31 @@ func (f *KeywordFilter) Match(entry *storage.LogEntry) bool {
 	return false
 }
 
-// WildcardFilter matches field values with wildcards
+// WildcardFilter matches field values with wildcards (* and ?)
 type WildcardFilter struct {
 	Field   string
 	Pattern string
+	re      *regexp.Regexp // compiled from Pattern; nil only in direct test construction
+}
+
+// compileWildcard turns a wildcard pattern into a compiled case-insensitive
+// regex. Non-wildcard characters are escaped so dots, parens, etc. are
+// treated as literals rather than regex metacharacters.
+func compileWildcard(pattern string) (*regexp.Regexp, error) {
+	var sb strings.Builder
+	sb.WriteString("(?i)^")
+	for _, ch := range pattern {
+		switch ch {
+		case '*':
+			sb.WriteString(".*")
+		case '?':
+			sb.WriteByte('.')
+		default:
+			sb.WriteString(regexp.QuoteMeta(string(ch)))
+		}
+	}
+	sb.WriteByte('$')
+	return regexp.Compile(sb.String())
 }
 
 func (f *WildcardFilter) Match(entry *storage.LogEntry) bool {
@@ -455,11 +645,61 @@ func (f *WildcardFilter) Match(entry *storage.LogEntry) bool {
 		}
 	}
 
-	// Convert wildcard pattern to regex
-	pattern := strings.ReplaceAll(f.Pattern, "*", ".*")
-	pattern = "^" + pattern + "$"
-	matched, _ := regexp.MatchString("(?i)"+pattern, value)
-	return matched
+	re := f.re
+	if re == nil {
+		// Fallback for filters constructed directly in tests without the parser.
+		re, _ = compileWildcard(f.Pattern)
+		if re == nil {
+			return false
+		}
+	}
+	return re.MatchString(value)
+}
+
+// ExistenceFilter matches entries where the specified field is present.
+// For built-in fields (level, message) it matches when the value is non-empty.
+// For custom fields it matches when the key exists in the entry's Fields map.
+type ExistenceFilter struct {
+	Field string
+}
+
+func (f *ExistenceFilter) Match(entry *storage.LogEntry) bool {
+	switch f.Field {
+	case "level":
+		return entry.Level != ""
+	case "message":
+		return entry.Message != ""
+	case "timestamp":
+		return !entry.Timestamp.IsZero()
+	default:
+		_, ok := entry.Fields[f.Field]
+		return ok
+	}
+}
+
+// RegexFilter matches entries where the field value matches the given regular expression.
+type RegexFilter struct {
+	Field string
+	Regex *regexp.Regexp
+}
+
+func (f *RegexFilter) Match(entry *storage.LogEntry) bool {
+	var value string
+
+	switch f.Field {
+	case "level":
+		value = entry.Level
+	case "message":
+		value = entry.Message
+	default:
+		if v, ok := entry.Fields[f.Field]; ok {
+			value = fmt.Sprintf("%v", v)
+		} else {
+			return false
+		}
+	}
+
+	return f.Regex.MatchString(value)
 }
 
 // TimestampRangeFilter filters by timestamp range
@@ -508,4 +748,65 @@ func (f *NumericRangeFilter) Match(entry *storage.LogEntry) bool {
 	}
 
 	return value >= f.Start && value <= f.End
+}
+
+// NumericComparisonFilter filters numeric fields with >, <, >=, <= operators
+type NumericComparisonFilter struct {
+	Field string
+	Op    string
+	Value float64
+}
+
+func (f *NumericComparisonFilter) Match(entry *storage.LogEntry) bool {
+	var value float64
+	if v, ok := entry.Fields[f.Field]; ok {
+		switch val := v.(type) {
+		case float64:
+			value = val
+		case int:
+			value = float64(val)
+		case string:
+			if parsed, err := strconv.ParseFloat(val, 64); err == nil {
+				value = parsed
+			} else {
+				return false
+			}
+		default:
+			return false
+		}
+	} else {
+		return false
+	}
+	switch f.Op {
+	case ">":
+		return value > f.Value
+	case ">=":
+		return value >= f.Value
+	case "<":
+		return value < f.Value
+	case "<=":
+		return value <= f.Value
+	}
+	return false
+}
+
+// TimestampComparisonFilter filters by timestamp with >, <, >=, <= operators
+type TimestampComparisonFilter struct {
+	Op    string
+	Value time.Time
+}
+
+func (f *TimestampComparisonFilter) Match(entry *storage.LogEntry) bool {
+	t := entry.Timestamp
+	switch f.Op {
+	case ">":
+		return t.After(f.Value)
+	case ">=":
+		return !t.Before(f.Value)
+	case "<":
+		return t.Before(f.Value)
+	case "<=":
+		return !t.After(f.Value)
+	}
+	return false
 }

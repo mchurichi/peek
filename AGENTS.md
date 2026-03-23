@@ -33,6 +33,7 @@ mise exec -- npx playwright test e2e/datetime.spec.mjs
 mise exec -- npx playwright test e2e/levelless.spec.mjs
 mise exec -- npx playwright test e2e/copy.spec.mjs
 mise exec -- npx playwright test e2e/ui-prefs.spec.mjs
+mise exec -- npx playwright test e2e/lucene-query.spec.mjs
 
 # Manual test log generation
 mise exec -- node e2e/loggen.mjs --count 200
@@ -72,6 +73,7 @@ e2e/datetime.spec.mjs      Datetime range picker UI and API integration
 e2e/levelless.spec.mjs     Levelless log entries rendering and filtering
 e2e/copy.spec.mjs          Row copy button and field-value click-to-filter
 e2e/ui-prefs.spec.mjs      Persistent UI preferences (columns, widths, time preset, reset)
+e2e/lucene-query.spec.mjs  Lucene query features: existence (field:*), regex, FTS, +/-, wildcard
 e2e/screenshot.mjs         Screenshot generator with realistic data
 e2e/loggen.mjs             Manual test-data log generator (json/logfmt/mixed)
 .github/workflows/ci-build-test.yml   CI pipeline (build, vet, unit tests, E2E tests)
