@@ -76,7 +76,7 @@ jobs:
         if: ${{ steps.pr_context.outputs.has_pr == 'true' }}
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.RELEASE_TAG_PAT }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
@@ -115,3 +115,21 @@ jobs:
               }
               throw err;
             }
+
+      - name: Trigger publish workflow
+        if: ${{ steps.pr_context.outputs.has_pr == 'true' }}
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const bump = '${{ steps.release_context.outputs.selected_bump }}';
+            const nextTag = '${{ steps.release_context.outputs.selected_next_tag }}';
+            if (bump === 'skip' || !nextTag) return;
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'release-publish-artifacts-from-tag.yml',
+              ref: 'main',
+              inputs: { tag: nextTag },
+            });
+            core.info(`Dispatched publish workflow for tag ${nextTag}`);
