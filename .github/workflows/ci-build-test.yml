@@ -11,11 +11,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
-          go-version: '1.24'
+          go-version-file: 'go.mod'
 
       - name: Build
         run: go build -o peek ./cmd/peek
@@ -26,14 +26,14 @@ jobs:
       - name: Unit Tests
         run: go test ./... -race -count=1
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: package-lock.json
 
       - name: Cache Playwright Browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
@@ -50,7 +50,7 @@ jobs:
 
       - name: Upload Playwright Artifacts (on failure)
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-artifacts
           path: |

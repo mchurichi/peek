@@ -23,11 +23,11 @@ jobs:
       actions: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Resolve merged PR for commit
         id: pr_context
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -75,7 +75,7 @@ jobs:
 
       - name: Create SemVer tag
         if: ${{ steps.pr_context.outputs.has_pr == 'true' }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -119,7 +119,7 @@ jobs:
 
       - name: Trigger publish workflow
         if: ${{ steps.pr_context.outputs.has_pr == 'true' }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
