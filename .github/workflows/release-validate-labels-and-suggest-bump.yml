@@ -32,7 +32,7 @@ jobs:
           include-suggestion: 'true'
 
       - name: Upsert release suggestion comment and enforce label policy
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const pr = context.payload.pull_request;
