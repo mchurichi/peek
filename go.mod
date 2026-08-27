@@ -4,7 +4,7 @@ go 1.24.13
 
 require (
 	github.com/BurntSushi/toml v1.6.0
-	github.com/dgraph-io/badger/v4 v4.9.5
+	github.com/dgraph-io/badger/v4 v4.9.6
 	github.com/gorilla/websocket v1.5.3
 )
 
