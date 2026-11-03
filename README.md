@@ -316,7 +316,7 @@ to exclude it (`AND NOT field:"value"`).
 
 ### Requirements
 
-- Go 1.24+
+- Go 1.27.3+
 - BadgerDB v4
 - Gorilla WebSocket
 
