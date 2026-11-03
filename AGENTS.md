@@ -88,7 +88,8 @@ scripts/get-peek.sh        Linux install/uninstall script for GitHub release bin
 
 ## Dependencies
 
-- Go, BadgerDB, Gorilla WebSocket, BurntSushi/toml
+- Go 1.27.3 (pinned in `go.mod` and `mise.toml`; CI and release builds use `go.mod`)
+- BadgerDB, Gorilla WebSocket, BurntSushi/toml
 - Frontend: VanJS (~1KB, bundled in binary), no build step
 - E2E: `@playwright/test` runner + `playwright` (Node.js)
 - Release: GoReleaser via GitHub Actions
